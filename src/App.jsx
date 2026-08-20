@@ -1,0 +1,21 @@
+function App() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold text-white">
+          FacultyConnect
+        </h1>
+
+        <p className="mt-3 text-slate-400">
+          Faculty Communication & Collaboration Platform
+        </p>
+
+        <button className="mt-6 rounded-lg bg-blue-600 px-5 py-3 font-medium text-white hover:bg-blue-700">
+          Tailwind Working
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default App
