@@ -3,5 +3,5 @@
  */
 
 export { default as authReducer } from './authSlice';
-export * from './authSlice';
-export * from './authService';
+export { login, register, loadUser, logout, clearError } from './authSlice';
+export { loginUser, registerUser, fetchCurrentUser } from './authService';

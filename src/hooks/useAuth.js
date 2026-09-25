@@ -3,18 +3,18 @@
  */
 
 import { useSelector, useDispatch } from 'react-redux';
-import { setCredentials, clearCredentials } from '../features/auth/authSlice';
+import { login, register, loadUser, logout, clearError } from '../features/auth/authSlice';
 
 export default function useAuth() {
   const dispatch = useDispatch();
   const auth = useSelector((state) => state.auth);
 
-  const login = (payload) => dispatch(setCredentials(payload));
-  const logout = () => dispatch(clearCredentials());
-
   return {
     ...auth,
-    login,
-    logout,
+    login: (credentials) => dispatch(login(credentials)),
+    register: (userData) => dispatch(register(userData)),
+    loadUser: () => dispatch(loadUser()),
+    logout: () => dispatch(logout()),
+    clearError: () => dispatch(clearError()),
   };
 }

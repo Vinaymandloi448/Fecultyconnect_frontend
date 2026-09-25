@@ -3,8 +3,8 @@
  *
  * Features:
  *  - base URL from env config
- *  - request interceptor  → attaches auth token
- *  - response interceptor → handles 401s globally
+ *  - request interceptor  → attaches JWT Bearer token
+ *  - response interceptor → handles 401s globally (redirect to login)
  */
 
 import axios from 'axios';
@@ -21,7 +21,7 @@ const axiosInstance = axios.create({
 // ── Request interceptor ──────────────────────────────────────────
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -34,7 +34,17 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    // TODO: handle 401 → refresh token or redirect to login
+    if (error.response?.status === 401) {
+      // Token expired or invalid — clear auth state and redirect
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
+      // Only redirect if not already on auth pages
+      const { pathname } = window.location;
+      if (!pathname.startsWith('/login') && !pathname.startsWith('/register')) {
+        window.location.href = '/login';
+      }
+    }
     return Promise.reject(error);
   },
 );

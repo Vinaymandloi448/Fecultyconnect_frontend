@@ -3,47 +3,41 @@
  *
  * Centralised endpoint definitions to avoid hardcoded strings in
  * service files and slices. Group by feature domain.
+ *
+ * NOTE: These are relative paths appended to env.API_BASE_URL
+ * which already includes /api, so paths here should NOT start with /api.
+ *
+ * Backend routes (Spring Boot @RequestMapping):
+ *   /api/auth/*            → AuthController
+ *   /api/profile/*         → ProfileController
+ *   /api/conversations/*   → ConversationController
+ *   /api/conversations/{id}/messages → MessageController
+ *   /api/groups/*          → GroupController
  */
 
 export const AUTH_ENDPOINTS = {
   LOGIN: '/auth/login',
   REGISTER: '/auth/register',
-  LOGOUT: '/auth/logout',
-  REFRESH: '/auth/refresh',
-  FORGOT_PASSWORD: '/auth/forgot-password',
 };
 
-export const USER_ENDPOINTS = {
-  ME: '/users/me',
-  UPDATE_PROFILE: '/users/profile',
-  CHANGE_PASSWORD: '/users/change-password',
+export const PROFILE_ENDPOINTS = {
+  ME: '/profile/me',
+  UPDATE: '/profile/me',
 };
 
-export const CHAT_ENDPOINTS = {
-  CONVERSATIONS: '/chat/conversations',
-  MESSAGES: (conversationId) => `/chat/conversations/${conversationId}/messages`,
+export const CONVERSATION_ENDPOINTS = {
+  LIST: '/conversations',
+  CREATE: '/conversations',
+  DETAIL: (conversationId) => `/conversations/${conversationId}`,
+  MESSAGES: (conversationId) => `/conversations/${conversationId}/messages`,
+  SEND_MESSAGE: (conversationId) => `/conversations/${conversationId}/messages`,
 };
 
 export const GROUP_ENDPOINTS = {
   LIST: '/groups',
+  CREATE: '/groups',
   DETAIL: (groupId) => `/groups/${groupId}`,
-  MEMBERS: (groupId) => `/groups/${groupId}/members`,
-};
-
-export const DOCUMENT_ENDPOINTS = {
-  LIST: '/documents',
-  UPLOAD: '/documents/upload',
-  DOWNLOAD: (documentId) => `/documents/${documentId}/download`,
-};
-
-export const ANNOUNCEMENT_ENDPOINTS = {
-  LIST: '/announcements',
-  CREATE: '/announcements',
-  DETAIL: (id) => `/announcements/${id}`,
-};
-
-export const NOTIFICATION_ENDPOINTS = {
-  LIST: '/notifications',
-  MARK_READ: (id) => `/notifications/${id}/read`,
-  MARK_ALL_READ: '/notifications/read-all',
+  DELETE: (groupId) => `/groups/${groupId}`,
+  ADD_MEMBER: (groupId, facultyId) => `/groups/${groupId}/members/${facultyId}`,
+  REMOVE_MEMBER: (groupId, facultyId) => `/groups/${groupId}/members/${facultyId}`,
 };
