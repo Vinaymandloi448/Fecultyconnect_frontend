@@ -1,7 +1,7 @@
 /**
  * ChatHeader — Slack-style conversation top bar
  *
- * Displays channel/DM identity, topic, members, star, and details panel toggle.
+ * Displays channel/DM identity, topic, members, star, STOMP connection state, and details panel toggle.
  */
 
 import { useState } from 'react';
@@ -12,15 +12,17 @@ import {
   Star,
   Users,
   Info,
-  Phone,
-  Video,
-  Search,
-  Sparkles,
+  Radio,
 } from 'lucide-react';
 import Avatar from '../ui/Avatar';
 import { toggleDetailsPanel } from '../../features/chat/chatSlice';
 
-export default function ChatHeader({ conversation, type = 'channel', faculty }) {
+export default function ChatHeader({
+  conversation,
+  type = 'channel',
+  faculty,
+  isConnected = false,
+}) {
   const dispatch = useDispatch();
   const { isDetailsPanelOpen } = useSelector((state) => state.chat);
   const [isStarred, setIsStarred] = useState(false);
@@ -90,8 +92,30 @@ export default function ChatHeader({ conversation, type = 'channel', faculty }) 
         )}
       </div>
 
-      {/* ── RIGHT: Members & Details Toggle ── */}
+      {/* ── RIGHT: Connection status badge, Members & Details Toggle ── */}
       <div className="flex items-center gap-2 shrink-0">
+        
+        {/* Real-time STOMP status badge */}
+        <div
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${
+            isConnected
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+          }`}
+          title={
+            isConnected
+              ? 'Connected to Spring Boot STOMP broker (/ws)'
+              : 'Connecting to STOMP / REST Fallback'
+          }
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+            }`}
+          />
+          <span className="hidden xs:inline">{isConnected ? 'STOMP Live' : 'Connecting'}</span>
+        </div>
+
         {type === 'channel' && (
           <button
             onClick={() => dispatch(toggleDetailsPanel())}

@@ -42,3 +42,27 @@ export const getMessages = (conversationId) =>
 export const sendMessageApi = (conversationId, content) =>
   axiosInstance.post(CONVERSATION_ENDPOINTS.SEND_MESSAGE(conversationId), { content });
 
+/**
+ * Upload an attachment (image or PDF/document)
+ * POST /api/conversations/{conversationId}/attachments
+ * FormData fields: file (required), content (optional)
+ */
+export const uploadAttachmentApi = (conversationId, file, content) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (content && content.trim()) {
+    formData.append('content', content.trim());
+  }
+  // Let browser generate Content-Type with multipart boundary automatically
+  return axiosInstance.post(CONVERSATION_ENDPOINTS.ATTACHMENTS(conversationId), formData);
+};
+
+/**
+ * Download or stream an attachment blob
+ * GET /api/conversations/{conversationId}/attachments/{attachmentId}
+ */
+export const downloadAttachmentApi = (conversationId, attachmentId) =>
+  axiosInstance.get(CONVERSATION_ENDPOINTS.ATTACHMENT_DOWNLOAD(conversationId, attachmentId), {
+    responseType: 'blob',
+  });
+

@@ -19,7 +19,7 @@ const ROUTES = {
   ANNOUNCEMENTS: '/dashboard/announcements',
   NOTIFICATIONS: '/dashboard/notifications',
   PROFILE: '/dashboard/profile',
-
+  CHAT: '/dashboard/channels/general',
 
   // Helper url builders
   channelUrl: (channelId) => `/dashboard/channels/${channelId}`,

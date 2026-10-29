@@ -30,13 +30,17 @@ export default function NewDmModal({ isOpen, onClose }) {
 
   // Filter candidates
   const candidates = facultyMembers.filter(
-    (m) => m.id !== currentUser?.id && m.id !== currentUser?.facultyId,
+    (m) =>
+      m.id !== currentUser?.id &&
+      m.facultyId !== currentUser?.facultyId &&
+      m.email !== currentUser?.email,
   );
 
   const filteredFaculty = candidates.filter(
     (m) =>
       m.fullName?.toLowerCase().includes(query.toLowerCase()) ||
       m.department?.toLowerCase().includes(query.toLowerCase()) ||
+      m.facultyId?.toLowerCase().includes(query.toLowerCase()) ||
       m.id?.toLowerCase().includes(query.toLowerCase()),
   );
 
@@ -165,35 +169,38 @@ export default function NewDmModal({ isOpen, onClose }) {
               No faculty in roster matching query. Use the direct ID box above.
             </div>
           ) : (
-            filteredFaculty.map((faculty) => (
-              <button
-                key={faculty.id}
-                onClick={() => handleStartWithFacultyId(faculty.id)}
-                disabled={isStarting}
-                className="w-full text-left py-2 px-3 rounded-xl hover:bg-purple-50 flex items-center justify-between group transition-colors focus:outline-none cursor-pointer"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar
-                    name={faculty.fullName}
-                    initials={faculty.initials}
-                    status={faculty.status}
-                    size="sm"
-                    rounded="lg"
-                    gradient={faculty.avatarColor}
-                  />
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-800 group-hover:text-purple-900 truncate">
-                      {faculty.fullName}
-                    </div>
-                    <div className="text-[10px] text-slate-500 truncate">
-                      ID: <span className="font-mono">{faculty.id}</span> · {faculty.department}
+            filteredFaculty.map((faculty) => {
+              const targetFacultyId = faculty.facultyId || faculty.id;
+              return (
+                <button
+                  key={faculty.facultyId || faculty.id}
+                  onClick={() => handleStartWithFacultyId(targetFacultyId)}
+                  disabled={isStarting}
+                  className="w-full text-left py-2 px-3 rounded-xl hover:bg-purple-50 flex items-center justify-between group transition-colors focus:outline-none cursor-pointer"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar
+                      name={faculty.fullName}
+                      initials={faculty.initials}
+                      status={faculty.status}
+                      size="sm"
+                      rounded="lg"
+                      gradient={faculty.avatarColor}
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-slate-800 group-hover:text-purple-900 truncate">
+                        {faculty.fullName}
+                      </div>
+                      <div className="text-[10px] text-slate-500 truncate">
+                        ID: <span className="font-mono">{targetFacultyId}</span> · {faculty.department}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <UserCheck className="w-3.5 h-3.5 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2" />
-              </button>
-            ))
+                  <UserCheck className="w-3.5 h-3.5 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2" />
+                </button>
+              );
+            })
           )}
         </div>
       </div>

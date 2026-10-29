@@ -2,7 +2,7 @@
  * Chat Redux slice
  *
  * Manages: channels, direct conversations, active conversation,
- * message history from Spring Boot REST & STOMP WebSocket, and message deduplication.
+ * message history from Spring Boot REST & STOMP WebSocket, and bidirectional message deduplication.
  */
 
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
@@ -12,7 +12,9 @@ import {
   createConversation,
   getMessages,
   sendMessageApi,
+  uploadAttachmentApi,
 } from './chatService';
+import { logout } from '../auth/authSlice';
 import { MOCK_CHANNELS, MOCK_FACULTY_MEMBERS, MOCK_MESSAGES } from '../../data/mockData';
 
 export const fetchConversations = createAsyncThunk(
@@ -42,6 +44,22 @@ export const createNewConversation = createAsyncThunk(
         error.response?.data?.error ||
         error.response?.data?.message ||
         'Failed to start conversation. Please check the Faculty ID.';
+      return rejectWithValue(message);
+    }
+  },
+);
+
+export const fetchConversationById = createAsyncThunk(
+  'chat/fetchConversationById',
+  async (conversationId, { rejectWithValue }) => {
+    try {
+      const response = await getConversationById(conversationId);
+      return response.data;
+    } catch (error) {
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Conversation not found.';
       return rejectWithValue(message);
     }
   },
@@ -82,19 +100,59 @@ export const sendChatMessage = createAsyncThunk(
   },
 );
 
+export const sendAttachmentMessage = createAsyncThunk(
+  'chat/sendAttachmentMessage',
+  async ({ conversationId, file, content }, { rejectWithValue }) => {
+    try {
+      const response = await uploadAttachmentApi(conversationId, file, content);
+      return {
+        ...response.data,
+        conversationId: response.data?.conversationId || conversationId,
+      };
+    } catch (error) {
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        (error.response?.status === 413 ? 'File exceeds maximum upload limit of 5 MB.' : 'Failed to upload attachment.');
+      return rejectWithValue(message);
+    }
+  },
+);
+
 // Format raw backend MessageResponse into UI format
 export const normalizeMessage = (msg) => {
   const timeStr = msg.createdAt
     ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : 'Just now';
 
+  const mId = msg.messageId || msg.id;
+
+  const attId = msg.attachmentId || msg.attachment?.attachmentId;
+  const attName = msg.attachmentName || msg.attachment?.name || msg.attachment?.attachmentName || msg.fileName;
+  const attType = msg.attachmentType || msg.attachment?.type || msg.attachment?.attachmentType || (attName ? attName.split('.').pop().toLowerCase() : null);
+  const attSize = msg.attachmentSize || msg.attachment?.size || msg.attachment?.attachmentSize;
+  const attUrl = msg.attachmentUrl || msg.attachment?.url;
+
   return {
-    id: msg.messageId || msg.id || 'msg-' + Date.now(),
-    messageId: msg.messageId || msg.id,
+    id: mId || ('msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
+    messageId: mId,
     conversationId: msg.conversationId,
     senderId: msg.senderId,
     receiverId: msg.receiverId,
     content: msg.content,
+    messageType: msg.messageType || (attId ? 'FILE' : 'TEXT'),
+    attachmentId: attId,
+    attachmentName: attName,
+    attachmentType: attType,
+    attachmentSize: attSize,
+    attachmentUrl: attUrl,
+    attachment: (attId || attName) ? {
+      attachmentId: attId,
+      name: attName,
+      type: attType,
+      size: attSize,
+      url: attUrl,
+    } : null,
     status: msg.status || 'SENT',
     createdAt: msg.createdAt,
     timestamp: 'Today at ' + timeStr,
@@ -108,11 +166,29 @@ export const normalizeMessage = (msg) => {
   };
 };
 
+/**
+ * Deduplicate comparison between two messages
+ */
+export const isDuplicateMessage = (m1, m2) => {
+  if (!m1 || !m2) return false;
+  if (m1.messageId && m2.messageId && m1.messageId === m2.messageId) return true;
+  if (m1.id && m2.id && m1.id === m2.id) return true;
+  if (m1.messageId && m2.id && m1.messageId === m2.id) return true;
+  if (m1.id && m2.messageId && m1.id === m2.messageId) return true;
+  return false;
+};
+
 const initialState = {
   channels: MOCK_CHANNELS,
   facultyMembers: MOCK_FACULTY_MEMBERS,
-  conversations: [], // Backend ConversationResponse list
-  messages: { ...MOCK_MESSAGES },
+  conversations: [],
+  messages: {
+    general: MOCK_MESSAGES.general || [],
+    announcements: MOCK_MESSAGES.announcements || [],
+    'computer-science': MOCK_MESSAGES['computer-science'] || [],
+    'examination-updates': MOCK_MESSAGES['examination-updates'] || [],
+    'faculty-resources': MOCK_MESSAGES['faculty-resources'] || [],
+  },
   activeConversationId: 'general',
   activeConversationType: 'channel', // 'channel' | 'direct'
   isDetailsPanelOpen: false,
@@ -152,13 +228,7 @@ const chatSlice = createSlice({
       }
 
       // Check for duplicates by messageId or id
-      const exists = state.messages[convId].some(
-        (m) =>
-          (m.messageId && norm.messageId && m.messageId === norm.messageId) ||
-          (m.id && norm.id && m.id === norm.id) ||
-          (m.messageId && norm.id && m.messageId === norm.id) ||
-          (m.id && norm.messageId && m.id === norm.messageId),
-      );
+      const exists = state.messages[convId].some((m) => isDuplicateMessage(m, norm));
 
       if (!exists) {
         state.messages[convId].push(norm);
@@ -176,7 +246,7 @@ const chatSlice = createSlice({
       const convoMessages = state.messages[conversationId];
       if (!convoMessages) return;
 
-      const msg = convoMessages.find((m) => m.id === messageId || m.messageId === messageId);
+      const msg = convoMessages.find((m) => isDuplicateMessage(m, { messageId, id: messageId }));
       if (!msg) return;
 
       if (!msg.reactions) {
@@ -242,6 +312,9 @@ const chatSlice = createSlice({
     setSearchQuery(state, action) {
       state.searchQuery = action.payload;
     },
+    clearChatError(state) {
+      state.error = null;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -251,7 +324,7 @@ const chatSlice = createSlice({
       })
       .addCase(fetchConversations.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.conversations = action.payload;
+        state.conversations = action.payload || [];
       })
       .addCase(fetchConversations.rejected, (state, action) => {
         state.isLoading = false;
@@ -260,6 +333,16 @@ const chatSlice = createSlice({
       // createNewConversation
       .addCase(createNewConversation.fulfilled, (state, action) => {
         const conv = action.payload;
+        if (!conv) return;
+        const exists = state.conversations.some((c) => c.conversationId === conv.conversationId);
+        if (!exists) {
+          state.conversations.unshift(conv);
+        }
+      })
+      // fetchConversationById
+      .addCase(fetchConversationById.fulfilled, (state, action) => {
+        const conv = action.payload;
+        if (!conv) return;
         const exists = state.conversations.some((c) => c.conversationId === conv.conversationId);
         if (!exists) {
           state.conversations.unshift(conv);
@@ -268,19 +351,47 @@ const chatSlice = createSlice({
       // fetchMessages
       .addCase(fetchMessages.pending, (state) => {
         state.isLoadingMessages = true;
+        state.error = null;
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
         state.isLoadingMessages = false;
         const { conversationId, messages } = action.payload;
-        state.messages[conversationId] = messages.map(normalizeMessage);
+        const fetchedNormalized = (messages || []).map(normalizeMessage);
+
+        const currentList = state.messages[conversationId] || [];
+
+        // Bidirectional deduplication: merge fetched REST messages with any WebSocket messages
+        // that may have arrived while fetchMessages was in-flight
+        const merged = [...fetchedNormalized];
+        currentList.forEach((existing) => {
+          const alreadyInMerged = merged.some((m) => isDuplicateMessage(m, existing));
+          if (!alreadyInMerged) {
+            merged.push(existing);
+          }
+        });
+
+        // Preserve chronological order
+        merged.sort((a, b) => {
+          if (a.createdAt && b.createdAt) {
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          }
+          return 0;
+        });
+
+        state.messages[conversationId] = merged;
       })
       .addCase(fetchMessages.rejected, (state, action) => {
         state.isLoadingMessages = false;
         state.error = action.payload;
+        const convId = action.meta?.arg;
+        if (convId) {
+          state.messages[convId] = [];
+        }
       })
       // sendChatMessage
       .addCase(sendChatMessage.pending, (state) => {
         state.isSendingMessage = true;
+        state.error = null;
       })
       .addCase(sendChatMessage.fulfilled, (state, action) => {
         state.isSendingMessage = false;
@@ -289,14 +400,8 @@ const chatSlice = createSlice({
         if (!state.messages[convId]) {
           state.messages[convId] = [];
         }
-        // Deduplicate
-        const exists = state.messages[convId].some(
-          (m) =>
-            (m.messageId && norm.messageId && m.messageId === norm.messageId) ||
-            (m.id && norm.id && m.id === norm.id) ||
-            (m.messageId && norm.id && m.messageId === norm.id) ||
-            (m.id && norm.messageId && m.id === norm.messageId),
-        );
+        // Deduplicate against existing messages
+        const exists = state.messages[convId].some((m) => isDuplicateMessage(m, norm));
         if (!exists) {
           state.messages[convId].push(norm);
         }
@@ -304,6 +409,34 @@ const chatSlice = createSlice({
       .addCase(sendChatMessage.rejected, (state, action) => {
         state.isSendingMessage = false;
         state.error = action.payload;
+      })
+      // sendAttachmentMessage
+      .addCase(sendAttachmentMessage.pending, (state) => {
+        state.isSendingMessage = true;
+        state.error = null;
+      })
+      .addCase(sendAttachmentMessage.fulfilled, (state, action) => {
+        state.isSendingMessage = false;
+        const norm = normalizeMessage(action.payload);
+        const convId = norm.conversationId;
+        if (!state.messages[convId]) {
+          state.messages[convId] = [];
+        }
+        const exists = state.messages[convId].some((m) => isDuplicateMessage(m, norm));
+        if (!exists) {
+          state.messages[convId].push(norm);
+        }
+      })
+      .addCase(sendAttachmentMessage.rejected, (state, action) => {
+        state.isSendingMessage = false;
+        state.error = action.payload;
+      })
+      // logout
+      .addCase(logout, (state) => {
+        state.conversations = [];
+        state.messages = {};
+        state.activeConversationId = 'general';
+        state.error = null;
       });
   },
 });
@@ -317,7 +450,7 @@ export const {
   toggleDetailsPanel,
   setDetailsPanelOpen,
   setSearchQuery,
+  clearChatError,
 } = chatSlice.actions;
 
 export default chatSlice.reducer;
-

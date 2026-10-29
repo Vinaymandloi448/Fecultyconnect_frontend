@@ -2,7 +2,7 @@
  * Spring STOMP WebSocket Client
  *
  * Implements native Spring STOMP connection using @stomp/stompjs.
- * Connects to ws://localhost:8080/ws with JWT Bearer authentication.
+ * Connects via the Vite proxy (/ws) or direct backend URL with JWT Bearer authentication.
  *
  * STOMP Specifications:
  * - CONNECT header: "Authorization: Bearer <token>"
@@ -14,7 +14,53 @@ import { Client } from '@stomp/stompjs';
 import env from '../../config/env';
 
 let stompClient = null;
-const activeSubscriptions = new Map();
+const activeSubscriptions = new Map(); // topic -> { subscription, onMessage }
+const connectionListeners = new Set();
+let isCurrentlyConnected = false;
+
+/**
+ * Resolves broker WebSocket URL dynamically:
+ * - If VITE_WS_URL is provided, use it
+ * - In browser environment, use relative WebSocket URL via Vite proxy: ws(s)://<host>/ws
+ * - Fallback to ws://localhost:8080/ws
+ */
+export const getBrokerUrl = () => {
+  if (import.meta.env?.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL;
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws`;
+  }
+  return env.WS_URL || 'ws://localhost:8080/ws';
+};
+
+const notifyConnectionListeners = (connected) => {
+  isCurrentlyConnected = connected;
+  connectionListeners.forEach((listener) => {
+    try {
+      listener(connected);
+    } catch (e) {
+      console.debug('[STOMP] Listener callback error:', e);
+    }
+  });
+};
+
+export const isStompConnected = () => Boolean(stompClient && stompClient.connected);
+
+/**
+ * Add a connection state listener (called on connect / disconnect)
+ */
+export const addConnectionListener = (listener) => {
+  connectionListeners.add(listener);
+  // Immediately notify with current real connected status
+  listener(isStompConnected());
+  return () => connectionListeners.delete(listener);
+};
+
+export const removeConnectionListener = (listener) => {
+  connectionListeners.delete(listener);
+};
 
 /**
  * Initialize and activate STOMP connection
@@ -24,11 +70,11 @@ const activeSubscriptions = new Map();
  */
 export const connectStomp = (token, onConnected, onError) => {
   if (stompClient && stompClient.active) {
-    if (onConnected) onConnected();
+    if (onConnected && isStompConnected()) onConnected();
     return stompClient;
   }
 
-  const wsUrl = env.WS_URL || 'ws://localhost:8080/ws';
+  const wsUrl = getBrokerUrl();
 
   stompClient = new Client({
     brokerURL: wsUrl,
@@ -37,7 +83,9 @@ export const connectStomp = (token, onConnected, onError) => {
     },
     debug: (str) => {
       if (env.IS_DEV) {
-        console.debug('[STOMP]', str);
+        // Redact JWT token from all debug logs to protect credentials
+        const sanitized = str.replace(/Bearer\s+[A-Za-z0-9-_=.]+/gi, 'Bearer [REDACTED]');
+        console.debug('[STOMP]', sanitized);
       }
     },
     reconnectDelay: 5000,
@@ -47,18 +95,38 @@ export const connectStomp = (token, onConnected, onError) => {
 
   stompClient.onConnect = (frame) => {
     if (env.IS_DEV) {
-      console.log('[STOMP] Connected successfully to Spring Boot broker:', frame);
+      console.log('[STOMP] Connected successfully to Spring Boot broker via', wsUrl);
     }
+    notifyConnectionListeners(true);
     if (onConnected) onConnected(frame);
+
+    // Re-subscribe any active topics upon reconnection
+    activeSubscriptions.forEach((info, topic) => {
+      try {
+        const sub = stompClient.subscribe(topic, (message) => {
+          try {
+            const body = JSON.parse(message.body);
+            if (info.onMessage) info.onMessage(body);
+          } catch (err) {
+            console.error('[STOMP] Message parse error:', err);
+          }
+        });
+        info.subscription = sub;
+      } catch (err) {
+        console.error('[STOMP] Re-subscribe error for', topic, err);
+      }
+    });
   };
 
   stompClient.onStompError = (frame) => {
-    console.error('[STOMP] Broker error:', frame.headers['message'], frame.body);
+    console.error('[STOMP] Broker error:', frame.headers?.['message'], frame.body);
+    notifyConnectionListeners(false);
     if (onError) onError(frame);
   };
 
   stompClient.onWebSocketError = (event) => {
     console.error('[STOMP] WebSocket transport error:', event);
+    notifyConnectionListeners(false);
     if (onError) onError(event);
   };
 
@@ -66,7 +134,7 @@ export const connectStomp = (token, onConnected, onError) => {
     if (env.IS_DEV) {
       console.log('[STOMP] Disconnected from Spring Boot broker');
     }
-    activeSubscriptions.clear();
+    notifyConnectionListeners(false);
   };
 
   stompClient.activate();
@@ -85,56 +153,61 @@ export const getStompClient = () => stompClient;
  * @returns {Function} Unsubscribe function
  */
 export const subscribeToConversation = (conversationId, onMessage) => {
-  if (!stompClient || !stompClient.connected) {
-    console.warn('[STOMP] Cannot subscribe: client not connected');
-    return () => {};
-  }
+  if (!conversationId) return () => {};
 
   const topic = `/topic/conversation/${conversationId}`;
 
-  // Unsubscribe previous subscription to avoid double handlers
+  // Unsubscribe previous subscription on this topic if exists
   if (activeSubscriptions.has(topic)) {
     try {
-      activeSubscriptions.get(topic).unsubscribe();
+      const prev = activeSubscriptions.get(topic);
+      if (prev.subscription) prev.subscription.unsubscribe();
     } catch (e) {
       console.debug('[STOMP] Cleanup existing sub error:', e);
     }
     activeSubscriptions.delete(topic);
   }
 
-  try {
-    const subscription = stompClient.subscribe(topic, (message) => {
-      try {
-        const body = JSON.parse(message.body);
-        if (env.IS_DEV) {
-          console.log('[STOMP] Incoming message on topic', topic, body);
-        }
-        if (onMessage) {
-          onMessage(body);
-        }
-      } catch (err) {
-        console.error('[STOMP] Failed to parse message frame body:', err);
-      }
-    });
+  let subscription = null;
 
-    activeSubscriptions.set(topic, subscription);
-
-    return () => {
-      try {
-        subscription.unsubscribe();
-        activeSubscriptions.delete(topic);
-      } catch (err) {
-        console.debug('[STOMP] Error during unsubscribe:', err);
-      }
-    };
-  } catch (err) {
-    console.error('[STOMP] Error subscribing to', topic, err);
-    return () => {};
+  if (stompClient && stompClient.connected) {
+    try {
+      subscription = stompClient.subscribe(topic, (message) => {
+        try {
+          const body = JSON.parse(message.body);
+          if (env.IS_DEV) {
+            console.log('[STOMP] Incoming message on topic', topic, body);
+          }
+          if (onMessage) {
+            onMessage(body);
+          }
+        } catch (err) {
+          console.error('[STOMP] Failed to parse message frame body:', err);
+        }
+      });
+    } catch (err) {
+      console.error('[STOMP] Error subscribing to', topic, err);
+    }
   }
+
+  // Register in active subscriptions map so onConnect can resubscribe if needed
+  activeSubscriptions.set(topic, { subscription, onMessage });
+
+  return () => {
+    try {
+      const active = activeSubscriptions.get(topic);
+      if (active?.subscription) {
+        active.subscription.unsubscribe();
+      }
+      activeSubscriptions.delete(topic);
+    } catch (err) {
+      console.debug('[STOMP] Error during unsubscribe:', err);
+    }
+  };
 };
 
 /**
- * Send real-time chat message over STOMP
+ * Send real-time chat message over STOMP (/app/chat.send)
  * @param {string} conversationId - The target conversation ID
  * @param {string} content - Message text content
  * @returns {boolean} Whether publish was initiated
@@ -166,11 +239,19 @@ export const sendStompMessage = (conversationId, content) => {
 export const disconnectStomp = () => {
   if (stompClient) {
     try {
+      activeSubscriptions.forEach((info) => {
+        try {
+          if (info.subscription) info.subscription.unsubscribe();
+        } catch (e) {
+          console.debug('[STOMP] Cleanup error on deactivate:', e);
+        }
+      });
       activeSubscriptions.clear();
       stompClient.deactivate();
     } catch (e) {
       console.debug('[STOMP] Error during deactivate:', e);
     }
     stompClient = null;
+    notifyConnectionListeners(false);
   }
 };

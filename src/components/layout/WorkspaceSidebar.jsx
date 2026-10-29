@@ -70,7 +70,7 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
     c.name.toLowerCase().includes(filterQuery.toLowerCase()),
   );
 
-  // Combine backend 1-on-1 conversations with directory faculty
+  // Render real backend 1-on-1 conversations from GET /api/conversations
   const backendDMs = (conversations || []).map((conv) => {
     const otherParticipant =
       conv.participantIds?.find(
@@ -79,6 +79,7 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
 
     return {
       id: conv.conversationId,
+      conversationId: conv.conversationId,
       fullName: otherParticipant,
       initials: otherParticipant.slice(0, 2).toUpperCase(),
       status: 'online',
@@ -87,15 +88,9 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
     };
   });
 
-  const allFaculty = [
-    ...backendDMs,
-    ...facultyMembers.filter(
-      (f) => !backendDMs.some((b) => b.id === f.id) && f.id !== currentUser?.id,
-    ),
-  ];
-
-  const filteredFaculty = allFaculty.filter((f) =>
-    f.fullName.toLowerCase().includes(filterQuery.toLowerCase()),
+  const filteredDMs = backendDMs.filter((dm) =>
+    dm.fullName.toLowerCase().includes(filterQuery.toLowerCase()) ||
+    dm.id.toLowerCase().includes(filterQuery.toLowerCase()),
   );
 
 
@@ -345,18 +340,26 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
 
           {!dmsCollapsed && (
             <div className="space-y-0.5 mt-1">
-              {filteredFaculty.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-purple-300/50 italic">
-                  No faculty match filter
-                </p>
+              {filteredDMs.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-purple-300/60 flex flex-col gap-1.5">
+                  <span className="italic">
+                    {filterQuery ? 'No conversations match search' : 'No active conversations yet'}
+                  </span>
+                  <button
+                    onClick={() => setIsDmModalOpen(true)}
+                    className="text-left text-[11px] text-purple-200 hover:text-white font-semibold underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    + Start Conversation
+                  </button>
+                </div>
               ) : (
-                filteredFaculty.map((faculty) => {
-                  const active = isDmActive(faculty.id);
+                filteredDMs.map((dm) => {
+                  const active = isDmActive(dm.id);
                   return (
                     <button
-                      key={faculty.id}
-                      onClick={() => handleSelectFaculty(faculty.id)}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between group transition-colors focus:outline-none ${
+                      key={dm.id}
+                      onClick={() => handleSelectFaculty(dm.id)}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between group transition-colors focus:outline-none cursor-pointer ${
                         active
                           ? 'bg-[#1164A3] text-white font-semibold shadow-xs'
                           : 'text-[#D1C2D9] hover:bg-white/10 hover:text-white'
@@ -364,15 +367,15 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar
-                          name={faculty.fullName}
-                          initials={faculty.initials}
-                          status={faculty.status}
+                          name={dm.fullName}
+                          initials={dm.initials}
+                          status={dm.status}
                           size="xs"
                           rounded="lg"
-                          gradient={faculty.avatarColor}
+                          gradient={dm.avatarColor}
                         />
-                        <span className="truncate text-xs">
-                          {faculty.fullName}
+                        <span className="truncate text-xs font-medium">
+                          {dm.fullName}
                         </span>
                       </div>
                     </button>
@@ -383,12 +386,11 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
               {/* Start new DM button */}
               <button
                 onClick={() => setIsDmModalOpen(true)}
-                className="w-full text-left px-2.5 py-1.5 rounded-lg text-purple-300/70 hover:text-white hover:bg-white/5 flex items-center gap-2 text-xs transition-colors mt-0.5"
+                className="w-full text-left px-2.5 py-1.5 rounded-lg text-purple-300/70 hover:text-white hover:bg-white/5 flex items-center gap-2 text-xs transition-colors mt-0.5 cursor-pointer"
               >
                 <div className="w-4 h-4 rounded-md bg-white/10 flex items-center justify-center">
                   <Plus className="w-3 h-3 text-white" />
                 </div>
-                <span>New message</span>
               </button>
             </div>
           )}

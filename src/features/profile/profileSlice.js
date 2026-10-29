@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { getProfile, updateProfile } from './profileService';
-import { updateProfile as updateAuthProfile } from '../auth/authSlice';
+import { updateProfile as updateAuthProfile, logout, login } from '../auth/authSlice';
 
 export const fetchProfile = createAsyncThunk(
   'profile/fetchProfile',
@@ -52,9 +52,31 @@ const profileSlice = createSlice({
       state.error = null;
       state.updateSuccess = false;
     },
+    clearProfile(state) {
+      state.profileData = null;
+      state.error = null;
+      state.updateSuccess = false;
+      state.isLoading = false;
+      state.isUpdating = false;
+    },
   },
   extraReducers: (builder) => {
     builder
+      // Reset profile state whenever a user logs out or logs in
+      .addCase(logout, (state) => {
+        state.profileData = null;
+        state.isLoading = false;
+        state.isUpdating = false;
+        state.error = null;
+        state.updateSuccess = false;
+      })
+      .addCase(login.fulfilled, (state) => {
+        state.profileData = null;
+        state.isLoading = false;
+        state.isUpdating = false;
+        state.error = null;
+        state.updateSuccess = false;
+      })
       // fetchProfile
       .addCase(fetchProfile.pending, (state) => {
         state.isLoading = true;
@@ -87,7 +109,7 @@ const profileSlice = createSlice({
   },
 });
 
-export const { clearProfileStatus } = profileSlice.actions;
+export const { clearProfileStatus, clearProfile } = profileSlice.actions;
 
 export default profileSlice.reducer;
 

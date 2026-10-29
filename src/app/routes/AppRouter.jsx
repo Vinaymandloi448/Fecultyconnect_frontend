@@ -60,6 +60,7 @@ export default function AppRouter() {
           <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
           <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
           <Route path={ROUTES.CHANNEL} element={<ChatPage />} />
+          <Route path="/dashboard/messages" element={<ChatPage />} />
           <Route path={ROUTES.MESSAGE} element={<ChatPage />} />
           <Route path={ROUTES.FILES} element={<DocumentsPage />} />
           <Route path={ROUTES.ANNOUNCEMENTS} element={<AnnouncementsPage />} />
