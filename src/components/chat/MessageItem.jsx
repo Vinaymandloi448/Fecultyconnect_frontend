@@ -49,18 +49,22 @@ export default function MessageItem({
 
   const popularEmojis = ['👍', '❤️', '💡', '📝', '🚀', '🎉', '🙏', '☕'];
 
+  const convId = conversationId || message.conversationId;
   const attId = message.attachmentId || message.attachment?.attachmentId;
   const attName = message.attachmentName || message.attachment?.name || 'attachment';
   const attType = (message.attachmentType || message.attachment?.type || (attName ? attName.split('.').pop() : ''))?.toLowerCase();
-  const isImage = message.messageType === 'IMAGE' || ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(attType);
+  const isImage =
+    message.messageType === 'IMAGE' ||
+    attType?.includes('image') ||
+    ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(attType);
 
   // Authenticated image preview loader
   useEffect(() => {
     let active = true;
     let objectUrl = null;
 
-    if (isImage && attId && conversationId) {
-      downloadAttachmentApi(conversationId, attId)
+    if (isImage && attId && convId) {
+      downloadAttachmentApi(convId, attId)
         .then((response) => {
           if (!active) return;
           const blob = new Blob([response.data]);
@@ -78,10 +82,10 @@ export default function MessageItem({
         window.URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [isImage, attId, conversationId]);
+  }, [isImage, attId, convId]);
 
   const handleDownload = async () => {
-    if (!attId || !conversationId) {
+    if (!attId || !convId) {
       if (imageBlobUrl) {
         const link = document.createElement('a');
         link.href = imageBlobUrl;
@@ -96,7 +100,7 @@ export default function MessageItem({
     try {
       setIsDownloading(true);
       setDownloadError(null);
-      const response = await downloadAttachmentApi(conversationId, attId);
+      const response = await downloadAttachmentApi(convId, attId);
       const blob = new Blob([response.data]);
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

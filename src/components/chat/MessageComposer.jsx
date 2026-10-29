@@ -39,8 +39,11 @@ export default function MessageComposer({
   const [rawFile, setRawFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [fileError, setFileError] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
+
+  const isBusy = isSendingMessage || isUploading;
 
   const quickEmojis = ['👍', '❤️', '💡', '📝', '🚀', '🎉', '🙏', '☕', '📚', '✅'];
 
@@ -61,6 +64,7 @@ export default function MessageComposer({
   }, [filePreview]);
 
   const handleRemoveAttachment = () => {
+    if (isUploading) return;
     if (filePreview?.previewUrl) {
       URL.revokeObjectURL(filePreview.previewUrl);
     }
@@ -103,11 +107,14 @@ export default function MessageComposer({
   };
 
   const handleSend = async () => {
+    if (isBusy) return;
     if (!text.trim() && !rawFile) return;
     const content = text.trim();
 
     if (rawFile) {
       if (isBackendConv) {
+        setIsUploading(true);
+        setFileError(null);
         try {
           await dispatch(
             sendAttachmentMessage({
@@ -116,9 +123,13 @@ export default function MessageComposer({
               content,
             }),
           ).unwrap();
+          handleRemoveAttachment();
+          setText('');
         } catch (err) {
           setFileError(typeof err === 'string' ? err : 'Failed to upload attachment.');
           return;
+        } finally {
+          setIsUploading(false);
         }
       } else {
         // Mock fallback
@@ -148,9 +159,9 @@ export default function MessageComposer({
             message: newMessage,
           }),
         );
+        handleRemoveAttachment();
+        setText('');
       }
-      handleRemoveAttachment();
-      setText('');
     } else {
       // Normal text message
       if (isBackendConv) {
@@ -257,14 +268,22 @@ export default function MessageComposer({
             )}
             <span className="font-semibold truncate">{filePreview.name}</span>
             <span className="text-[11px] text-purple-600">({filePreview.size})</span>
+            {isUploading && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full ml-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Uploading...
+              </span>
+            )}
           </div>
-          <button
-            onClick={handleRemoveAttachment}
-            className="p-1 hover:text-rose-600 transition-colors cursor-pointer"
-            title="Remove attachment"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
+          {!isUploading && (
+            <button
+              onClick={handleRemoveAttachment}
+              className="p-1 hover:text-rose-600 transition-colors cursor-pointer"
+              title="Remove attachment"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       )}
 
@@ -414,15 +433,15 @@ export default function MessageComposer({
             <button
               type="button"
               onClick={handleSend}
-              disabled={(!text.trim() && !rawFile) || isSendingMessage}
+              disabled={(!text.trim() && !rawFile) || isBusy}
               className={`p-2 rounded-lg transition-all flex items-center justify-center ${
-                text.trim() || rawFile
+                (text.trim() || rawFile) && !isBusy
                   ? 'bg-purple-700 hover:bg-purple-800 text-white shadow-xs cursor-pointer'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
-              title="Send message"
+              title={isUploading ? 'Uploading file...' : 'Send message'}
             >
-              {isSendingMessage ? (
+              {isBusy ? (
                 <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
               ) : (
                 <SendHorizontal className="w-4 h-4" />

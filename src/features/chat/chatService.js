@@ -50,11 +50,15 @@ export const sendMessageApi = (conversationId, content) =>
 export const uploadAttachmentApi = (conversationId, file, content) => {
   const formData = new FormData();
   formData.append('file', file);
-  if (content && content.trim()) {
+  if (content && typeof content === 'string' && content.trim()) {
     formData.append('content', content.trim());
   }
-  // Let browser generate Content-Type with multipart boundary automatically
-  return axiosInstance.post(CONVERSATION_ENDPOINTS.ATTACHMENTS(conversationId), formData);
+  // Let browser and Axios generate Content-Type with multipart boundary automatically
+  return axiosInstance.post(CONVERSATION_ENDPOINTS.ATTACHMENTS(conversationId), formData, {
+    headers: {
+      'Content-Type': undefined,
+    },
+  });
 };
 
 /**

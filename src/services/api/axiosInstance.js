@@ -13,9 +13,6 @@ import env from '../../config/env';
 const axiosInstance = axios.create({
   baseURL: env.API_BASE_URL,
   timeout: 15_000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // ── Request interceptor ──────────────────────────────────────────
@@ -27,6 +24,19 @@ axiosInstance.interceptors.request.use(
     } else {
       delete config.headers.Authorization;
     }
+
+    // When sending FormData, delete any default/forced Content-Type so browser
+    // automatically computes multipart/form-data with the correct boundary
+    if (config.data instanceof FormData) {
+      if (config.headers?.delete) {
+        config.headers.delete('Content-Type');
+        config.headers.delete('content-type');
+      } else if (config.headers) {
+        delete config.headers['Content-Type'];
+        delete config.headers['content-type'];
+      }
+    }
+
     return config;
   },
   (error) => Promise.reject(error),

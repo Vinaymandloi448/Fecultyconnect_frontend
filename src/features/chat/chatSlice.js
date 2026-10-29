@@ -105,9 +105,30 @@ export const sendAttachmentMessage = createAsyncThunk(
   async ({ conversationId, file, content }, { rejectWithValue }) => {
     try {
       const response = await uploadAttachmentApi(conversationId, file, content);
+      const data = response.data;
+      if (data?.message) {
+        return {
+          ...data.message,
+          attachmentId: data.attachmentId || data.message.attachmentId,
+          attachmentName: data.originalFilename || data.message.attachmentName,
+          attachmentType: data.mimeType || data.message.attachmentType,
+          attachmentSize: data.size ?? data.message.attachmentSize,
+          downloadUrl: data.downloadUrl || data.message.downloadUrl,
+          viewUrl: data.viewUrl || data.message.viewUrl,
+          conversationId: data.conversationId || data.message.conversationId || conversationId,
+        };
+      }
       return {
-        ...response.data,
-        conversationId: response.data?.conversationId || conversationId,
+        ...data,
+        messageId: data.messageId || data.id,
+        content: content || data.originalFilename,
+        attachmentId: data.attachmentId,
+        attachmentName: data.originalFilename,
+        attachmentType: data.mimeType,
+        attachmentSize: data.size,
+        downloadUrl: data.downloadUrl,
+        viewUrl: data.viewUrl,
+        conversationId: data.conversationId || conversationId,
       };
     } catch (error) {
       const message =
@@ -121,23 +142,45 @@ export const sendAttachmentMessage = createAsyncThunk(
 
 // Format raw backend MessageResponse into UI format
 export const normalizeMessage = (msg) => {
-  const timeStr = msg.createdAt
-    ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const timeStr = msg.createdAt || msg.uploadTimestamp
+    ? new Date(msg.createdAt || msg.uploadTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : 'Just now';
 
   const mId = msg.messageId || msg.id;
 
   const attId = msg.attachmentId || msg.attachment?.attachmentId;
-  const attName = msg.attachmentName || msg.attachment?.name || msg.attachment?.attachmentName || msg.fileName;
-  const attType = msg.attachmentType || msg.attachment?.type || msg.attachment?.attachmentType || (attName ? attName.split('.').pop().toLowerCase() : null);
-  const attSize = msg.attachmentSize || msg.attachment?.size || msg.attachment?.attachmentSize;
-  const attUrl = msg.attachmentUrl || msg.attachment?.url;
+  const attName =
+    msg.originalFilename ||
+    msg.attachmentName ||
+    msg.attachment?.originalFilename ||
+    msg.attachment?.name ||
+    msg.attachment?.attachmentName ||
+    msg.fileName;
+  const rawType =
+    msg.mimeType ||
+    msg.attachmentType ||
+    msg.attachment?.mimeType ||
+    msg.attachment?.type ||
+    msg.attachment?.attachmentType;
+  const attType = rawType
+    ? (rawType.includes('/') ? rawType.split('/').pop().toLowerCase() : rawType.toLowerCase())
+    : (attName ? attName.split('.').pop().toLowerCase() : null);
+  const attSize =
+    msg.size ??
+    msg.attachmentSize ??
+    msg.attachment?.size ??
+    msg.attachment?.attachmentSize;
+  const attUrl =
+    msg.viewUrl ||
+    msg.downloadUrl ||
+    msg.attachmentUrl ||
+    msg.attachment?.url;
 
   return {
     id: mId || ('msg-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7)),
     messageId: mId,
     conversationId: msg.conversationId,
-    senderId: msg.senderId,
+    senderId: msg.senderId || msg.uploaderFacultyId || msg.uploaderEmail,
     receiverId: msg.receiverId,
     content: msg.content,
     messageType: msg.messageType || (attId ? 'FILE' : 'TEXT'),
@@ -154,12 +197,12 @@ export const normalizeMessage = (msg) => {
       url: attUrl,
     } : null,
     status: msg.status || 'SENT',
-    createdAt: msg.createdAt,
+    createdAt: msg.createdAt || msg.uploadTimestamp,
     timestamp: 'Today at ' + timeStr,
-    senderName: msg.senderName || msg.senderId || 'Faculty Colleague',
+    senderName: msg.senderName || msg.senderId || msg.uploaderEmail || 'Faculty Colleague',
     senderDesignation: msg.senderDesignation || 'Faculty',
-    senderInitials: msg.senderId
-      ? msg.senderId.slice(0, 2).toUpperCase()
+    senderInitials: (msg.senderId || msg.uploaderEmail)
+      ? (msg.senderId || msg.uploaderEmail).slice(0, 2).toUpperCase()
       : 'FC',
     senderAvatarColor: 'from-purple-600 to-indigo-600',
     reactions: msg.reactions || [],
