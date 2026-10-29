@@ -2,7 +2,7 @@
  * MessageItem — Slack-inspired message row with reactions and file previews
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import {
   FileText,
@@ -12,9 +12,12 @@ import {
   Check,
   FileSpreadsheet,
   FileCode,
+  Loader2,
+  Image as ImageIcon,
 } from 'lucide-react';
 import Avatar from '../ui/Avatar';
 import { toggleReaction } from '../../features/chat/chatSlice';
+import { downloadAttachmentApi } from '../../features/chat/chatService';
 
 export default function MessageItem({
   message,
@@ -26,8 +29,111 @@ export default function MessageItem({
 
   const [copied, setCopied] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [imageBlobUrl, setImageBlobUrl] = useState(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
+
+  const isMe =
+    Boolean(currentUser) &&
+    ((currentUser?.id && message.senderId === currentUser.id) ||
+      (currentUser?.facultyId && message.senderId === currentUser.facultyId) ||
+      (currentUser?.email && message.senderId === currentUser.email));
+
+  const senderDisplayName = isMe
+    ? (currentUser.fullName ? `${currentUser.fullName} (You)` : 'You')
+    : (message.senderName || message.senderId || 'Faculty Colleague');
+
+  const senderInitials = isMe
+    ? (currentUser.initials || (currentUser.fullName ? currentUser.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'ME'))
+    : (message.senderInitials || (message.senderId ? message.senderId.slice(0, 2).toUpperCase() : 'FC'));
 
   const popularEmojis = ['👍', '❤️', '💡', '📝', '🚀', '🎉', '🙏', '☕'];
+
+  const convId = conversationId || message.conversationId;
+  const attId = message.attachmentId || message.attachment?.attachmentId;
+  const attName = message.attachmentName || message.attachment?.name || 'attachment';
+  const attType = (message.attachmentType || message.attachment?.type || (attName ? attName.split('.').pop() : ''))?.toLowerCase();
+  const isImage =
+    message.messageType === 'IMAGE' ||
+    attType?.includes('image') ||
+    ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(attType);
+
+  // Authenticated image preview loader
+  useEffect(() => {
+    let active = true;
+    let objectUrl = null;
+
+    if (isImage && attId && convId) {
+      downloadAttachmentApi(convId, attId)
+        .then((response) => {
+          if (!active) return;
+          const blob = new Blob([response.data]);
+          objectUrl = window.URL.createObjectURL(blob);
+          setImageBlobUrl(objectUrl);
+        })
+        .catch((err) => {
+          console.warn('Failed to load authenticated image preview:', err);
+        });
+    }
+
+    return () => {
+      active = false;
+      if (objectUrl) {
+        window.URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [isImage, attId, convId]);
+
+  const handleDownload = async () => {
+    if (!attId || !convId) {
+      if (imageBlobUrl) {
+        const link = document.createElement('a');
+        link.href = imageBlobUrl;
+        link.download = attName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      return;
+    }
+
+    try {
+      setIsDownloading(true);
+      setDownloadError(null);
+      const response = await downloadAttachmentApi(convId, attId);
+      const blob = new Blob([response.data]);
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = attName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000);
+    } catch (err) {
+      console.error('Download failed:', err);
+      setDownloadError('Download failed');
+      setTimeout(() => setDownloadError(null), 3000);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const formatFileSize = (size) => {
+    if (!size) return '';
+    if (typeof size === 'string' && (size.includes('MB') || size.includes('KB') || size.includes('B'))) {
+      return size;
+    }
+    const num = Number(size);
+    if (isNaN(num)) return size;
+    if (num >= 1024 * 1024) {
+      return `${(num / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    if (num >= 1024) {
+      return `${Math.round(num / 1024)} KB`;
+    }
+    return `${num} B`;
+  };
 
   const handleToggleReaction = (emoji) => {
     dispatch(
@@ -71,11 +177,11 @@ export default function MessageItem({
       {/* ── SENDER AVATAR ── */}
       {!isGrouped ? (
         <Avatar
-          name={message.senderName}
-          initials={message.senderInitials}
+          name={senderDisplayName}
+          initials={senderInitials}
           size="md"
           rounded="xl"
-          gradient={message.senderAvatarColor}
+          gradient={isMe ? 'from-purple-700 to-indigo-700' : message.senderAvatarColor}
         />
       ) : (
         <div className="w-9 shrink-0 text-center">
@@ -92,7 +198,7 @@ export default function MessageItem({
         {!isGrouped && (
           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
             <span className="text-sm font-bold text-slate-900">
-              {message.senderName || message.senderId}
+              {senderDisplayName}
             </span>
             {message.senderDesignation && (
               <span className="px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 text-[10px] font-semibold border border-purple-200">
@@ -110,36 +216,87 @@ export default function MessageItem({
           </div>
         )}
 
-
         {/* Text Content */}
-        <div className="text-sm text-slate-800 leading-relaxed break-words whitespace-pre-wrap font-normal">
-          {message.content}
-        </div>
+        {message.content && (
+          <div className="text-sm text-slate-800 leading-relaxed break-words whitespace-pre-wrap font-normal">
+            {message.content}
+          </div>
+        )}
 
-        {/* ── ATTACHED FILE CARD (if any) ── */}
-        {message.attachment && (
-          <div className="mt-2.5 max-w-sm rounded-xl border border-slate-200 bg-white p-3 shadow-xs hover:border-purple-300 transition-colors flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                {renderFileIcon(message.attachment.type)}
+        {/* ── ATTACHMENT DISPLAY (Image or File) ── */}
+        {(message.attachment || message.attachmentId) && (
+          <div className="mt-2.5 max-w-sm">
+            {isImage ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden shadow-xs">
+                {imageBlobUrl ? (
+                  <div className="relative group/img">
+                    <img
+                      src={imageBlobUrl}
+                      alt={attName}
+                      className="max-h-64 w-auto rounded-t-xl object-contain bg-white mx-auto cursor-pointer"
+                      onClick={handleDownload}
+                      title="Click to download"
+                    />
+                    <div className="p-2 bg-white border-t border-slate-100 flex items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-slate-800 truncate" title={attName}>
+                        {attName}
+                      </div>
+                      <button
+                        onClick={handleDownload}
+                        disabled={isDownloading}
+                        className="p-1 rounded text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition-colors shrink-0 cursor-pointer"
+                        title="Download image"
+                      >
+                        {isDownloading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                    <span>Loading image...</span>
+                  </div>
+                )}
               </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-slate-800 truncate" title={message.attachment.name}>
-                  {message.attachment.name}
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-xs hover:border-purple-300 transition-colors flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                    {renderFileIcon(attType)}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-800 truncate" title={attName}>
+                      {attName}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {formatFileSize(message.attachmentSize || message.attachment?.size)} · Academic Document
+                    </div>
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-400">
-                  {message.attachment.size} · Academic Document
-                </div>
-              </div>
-            </div>
 
-            <button
-              onClick={() => alert(`Simulated download for: ${message.attachment.name}`)}
-              className="p-1.5 rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition-colors shrink-0"
-              title="Download file"
-            >
-              <Download className="w-4 h-4" />
-            </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  {downloadError && (
+                    <span className="text-[10px] text-rose-600 font-medium">Failed</span>
+                  )}
+                  <button
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-purple-700 hover:bg-purple-50 transition-colors cursor-pointer"
+                    title="Download file"
+                  >
+                    {isDownloading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

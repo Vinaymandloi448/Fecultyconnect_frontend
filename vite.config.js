@@ -8,15 +8,15 @@ export default defineConfig({
     tailwindcss(),
   ],
   server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:8080',
-        ws: true,
-      },
+  proxy: {
+    "/api": {
+      target: "http://localhost:8080",
+      changeOrigin: true,
+    },
+    "/ws": {
+      target: "ws://localhost:8080",
+      ws: true,
     },
   },
+}
 })

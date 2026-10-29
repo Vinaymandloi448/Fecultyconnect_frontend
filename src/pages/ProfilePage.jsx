@@ -210,7 +210,7 @@ export default function ProfilePage() {
             </div>
 
             <p className="text-xs font-semibold text-purple-700">
-              {activeFaculty?.designation} · {activeFaculty?.department}
+              {[activeFaculty?.designation, activeFaculty?.department].filter(Boolean).join(' · ') || 'Faculty Member'}
             </p>
 
             <p className="text-xs text-slate-500">
@@ -269,7 +269,7 @@ export default function ProfilePage() {
             </span>
             <div className="flex items-center gap-2 text-slate-800 font-medium text-sm">
               <Building2 className="w-4 h-4 text-purple-600" />
-              <span>{activeFaculty?.department || 'Computer Science & Engineering'}</span>
+              <span>{activeFaculty?.department || 'Not specified'}</span>
             </div>
           </div>
 
@@ -279,7 +279,7 @@ export default function ProfilePage() {
             </span>
             <div className="flex items-center gap-2 text-slate-800 font-medium text-sm">
               <Briefcase className="w-4 h-4 text-purple-600" />
-              <span>{activeFaculty?.designation || 'Professor'}</span>
+              <span>{activeFaculty?.designation || 'Faculty Member'}</span>
             </div>
           </div>
 
@@ -289,7 +289,7 @@ export default function ProfilePage() {
             </span>
             <div className="flex items-center gap-2 text-slate-800 font-medium text-sm">
               <Mail className="w-4 h-4 text-purple-600" />
-              <span className="text-purple-700 font-semibold">{activeFaculty?.email || 'faculty@college.edu'}</span>
+              <span className="text-purple-700 font-semibold">{activeFaculty?.email || 'Not specified'}</span>
             </div>
           </div>
 
@@ -310,9 +310,11 @@ export default function ProfilePage() {
             <div className="flex items-start gap-2 text-slate-800 font-medium text-sm">
               <BookOpen className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
               <span>
-                {Array.isArray(activeFaculty?.subjects)
+                {Array.isArray(activeFaculty?.subjects) && activeFaculty.subjects.length > 0
                   ? activeFaculty.subjects.join(', ')
-                  : activeFaculty?.subjects || 'General Academic Courses'}
+                  : (typeof activeFaculty?.subjects === 'string' && activeFaculty.subjects.trim())
+                  ? activeFaculty.subjects
+                  : 'No teaching subjects specified'}
               </span>
             </div>
           </div>
@@ -322,7 +324,7 @@ export default function ProfilePage() {
               Professional Biography
             </span>
             <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              {activeFaculty?.bio || 'Authorized faculty member at Faculty Connect.'}
+              {activeFaculty?.bio || 'No professional biography provided.'}
             </p>
           </div>
         </div>

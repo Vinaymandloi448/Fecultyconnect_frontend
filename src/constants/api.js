@@ -31,6 +31,8 @@ export const CONVERSATION_ENDPOINTS = {
   DETAIL: (conversationId) => `/conversations/${conversationId}`,
   MESSAGES: (conversationId) => `/conversations/${conversationId}/messages`,
   SEND_MESSAGE: (conversationId) => `/conversations/${conversationId}/messages`,
+  ATTACHMENTS: (conversationId) => `/conversations/${conversationId}/attachments`,
+  ATTACHMENT_DOWNLOAD: (conversationId, attachmentId) => `/conversations/${conversationId}/attachments/${attachmentId}`,
 };
 
 export const GROUP_ENDPOINTS = {

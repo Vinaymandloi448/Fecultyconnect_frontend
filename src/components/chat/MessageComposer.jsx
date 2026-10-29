@@ -2,7 +2,7 @@
  * MessageComposer — Slack-style message input with formatting and file upload
  */
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Bold,
@@ -16,11 +16,14 @@ import {
   X,
   FileText,
   Loader2,
-  Zap,
-  Radio,
+  AlertCircle,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { sendMessage, sendChatMessage } from '../../features/chat/chatSlice';
+import { sendMessage, sendChatMessage, sendAttachmentMessage } from '../../features/chat/chatSlice';
 import useStomp from '../../hooks/useStomp';
+
+const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'csv'];
 
 export default function MessageComposer({
   conversationId,
@@ -33,10 +36,14 @@ export default function MessageComposer({
 
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [attachedFile, setAttachedFile] = useState(null);
-  const [sendMode, setSendMode] = useState('auto'); // 'auto' | 'stomp' | 'rest'
+  const [rawFile, setRawFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [fileError, setFileError] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
+
+  const isBusy = isSendingMessage || isUploading;
 
   const quickEmojis = ['👍', '❤️', '💡', '📝', '🚀', '🎉', '🙏', '☕', '📚', '✅'];
 
@@ -47,56 +54,154 @@ export default function MessageComposer({
       conversations.some((c) => c.conversationId === conversationId) ||
       (!conversationId.startsWith('chan-') && conversationId !== 'general'));
 
+  // Clean up object URL on unmount
+  useEffect(() => {
+    return () => {
+      if (filePreview?.previewUrl) {
+        URL.revokeObjectURL(filePreview.previewUrl);
+      }
+    };
+  }, [filePreview]);
+
+  const handleRemoveAttachment = () => {
+    if (isUploading) return;
+    if (filePreview?.previewUrl) {
+      URL.revokeObjectURL(filePreview.previewUrl);
+    }
+    setRawFile(null);
+    setFilePreview(null);
+    setFileError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = (e) => {
+    setFileError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+      setFileError(`File type .${ext} is not supported. Allowed formats: PDF, JPG, PNG, WEBP, DOCX, XLSX.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+      setFileError(`File size (${sizeMB} MB) exceeds maximum allowed limit of 5 MB.`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const isImg = ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
+    setRawFile(file);
+    setFilePreview({
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      type: ext,
+      isImage: isImg,
+      previewUrl: isImg ? URL.createObjectURL(file) : null,
+    });
+  };
+
   const handleSend = async () => {
-    if (!text.trim() && !attachedFile) return;
+    if (isBusy) return;
+    if (!text.trim() && !rawFile) return;
     const content = text.trim();
 
-    if (isBackendConv) {
-      if (sendMode === 'stomp' && isConnected) {
-        // Send directly via WebSocket STOMP to /app/chat.send
-        const sent = send(conversationId, content);
-        if (!sent) {
-          // Fallback to REST if STOMP publish failed
+    if (rawFile) {
+      if (isBackendConv) {
+        setIsUploading(true);
+        setFileError(null);
+        try {
+          await dispatch(
+            sendAttachmentMessage({
+              conversationId,
+              file: rawFile,
+              content,
+            }),
+          ).unwrap();
+          handleRemoveAttachment();
+          setText('');
+        } catch (err) {
+          setFileError(typeof err === 'string' ? err : 'Failed to upload attachment.');
+          return;
+        } finally {
+          setIsUploading(false);
+        }
+      } else {
+        // Mock fallback
+        const newMessage = {
+          id: 'msg-' + Date.now(),
+          conversationId,
+          senderId: currentUser?.id || currentUser?.facultyId || 'fac-01',
+          senderName: currentUser?.fullName || 'Faculty Member',
+          senderDesignation: currentUser?.designation || 'Faculty',
+          senderInitials: currentUser?.initials || 'FC',
+          senderAvatarColor: currentUser?.avatarColor || 'from-purple-600 to-indigo-600',
+          timestamp:
+            'Today at ' +
+            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          content,
+          attachment: {
+            name: rawFile.name,
+            size: filePreview?.size || `${(rawFile.size / (1024 * 1024)).toFixed(2)} MB`,
+            type: filePreview?.type || 'file',
+          },
+          reactions: [],
+        };
+
+        dispatch(
+          sendMessage({
+            conversationId,
+            message: newMessage,
+          }),
+        );
+        handleRemoveAttachment();
+        setText('');
+      }
+    } else {
+      // Normal text message
+      if (isBackendConv) {
+        if (isConnected) {
+          // Preferred real-time send path via STOMP /app/chat.send
+          const sent = send(conversationId, content);
+          if (!sent) {
+            // Fallback to REST if STOMP publish fails
+            dispatch(sendChatMessage({ conversationId, content }));
+          }
+        } else {
+          // Fallback to REST when STOMP is offline
           dispatch(sendChatMessage({ conversationId, content }));
         }
       } else {
-        // Default / Auto / REST: Send via POST /api/conversations/{conversationId}/messages
-        // The backend persists and broadcasts via STOMP; deduplication handles both
-        dispatch(sendChatMessage({ conversationId, content }));
-      }
-    } else {
-      // Mock / Local channel fallback
-      const newMessage = {
-        id: 'msg-' + Date.now(),
-        senderId: currentUser?.id || currentUser?.facultyId || 'fac-01',
-        senderName: currentUser?.fullName || 'Faculty Member',
-        senderDesignation: currentUser?.designation || 'Faculty',
-        senderInitials: currentUser?.initials || 'FC',
-        senderAvatarColor: currentUser?.avatarColor || 'from-purple-600 to-indigo-600',
-        timestamp:
-          'Today at ' +
-          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        content,
-        attachment: attachedFile
-          ? {
-              name: attachedFile.name,
-              size: attachedFile.size,
-              type: attachedFile.type,
-            }
-          : null,
-        reactions: [],
-      };
+        // Mock / Local channel fallback
+        const newMessage = {
+          id: 'msg-' + Date.now(),
+          senderId: currentUser?.id || currentUser?.facultyId || 'fac-01',
+          senderName: currentUser?.fullName || 'Faculty Member',
+          senderDesignation: currentUser?.designation || 'Faculty',
+          senderInitials: currentUser?.initials || 'FC',
+          senderAvatarColor: currentUser?.avatarColor || 'from-purple-600 to-indigo-600',
+          timestamp:
+            'Today at ' +
+            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          content,
+          reactions: [],
+        };
 
-      dispatch(
-        sendMessage({
-          conversationId,
-          message: newMessage,
-        }),
-      );
+        dispatch(
+          sendMessage({
+            conversationId,
+            message: newMessage,
+          }),
+        );
+      }
+      setText('');
     }
 
-    setText('');
-    setAttachedFile(null);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -106,19 +211,6 @@ export default function MessageComposer({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
-    }
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const ext = file.name.split('.').pop().toLowerCase();
-      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      setAttachedFile({
-        name: file.name,
-        size: `${sizeMB} MB`,
-        type: ext,
-      });
     }
   };
 
@@ -145,20 +237,53 @@ export default function MessageComposer({
   return (
     <div className="p-4 bg-white border-t border-slate-200 select-none">
       
-      {/* ── ATTACHED FILE PREVIEW CHIP ── */}
-      {attachedFile && (
-        <div className="mb-2 flex items-center justify-between p-2 rounded-lg bg-purple-50 border border-purple-200 text-xs text-purple-900 max-w-sm">
-          <div className="flex items-center gap-2 truncate">
-            <FileText className="w-4 h-4 text-purple-600 shrink-0" />
-            <span className="font-semibold truncate">{attachedFile.name}</span>
-            <span className="text-[11px] text-purple-600">({attachedFile.size})</span>
+      {/* ── ATTACHMENT ERROR BANNER ── */}
+      {fileError && (
+        <div className="mb-2 flex items-center justify-between p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{fileError}</span>
           </div>
           <button
-            onClick={() => setAttachedFile(null)}
-            className="p-1 hover:text-rose-600 transition-colors"
+            onClick={() => setFileError(null)}
+            className="p-1 hover:text-rose-900 transition-colors"
           >
             <X className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* ── ATTACHED FILE PREVIEW CHIP ── */}
+      {filePreview && (
+        <div className="mb-2 flex items-center justify-between p-2 rounded-lg bg-purple-50 border border-purple-200 text-xs text-purple-900 max-w-md">
+          <div className="flex items-center gap-2 truncate">
+            {filePreview.isImage && filePreview.previewUrl ? (
+              <img
+                src={filePreview.previewUrl}
+                alt="Preview"
+                className="w-8 h-8 rounded object-cover border border-purple-200 shrink-0"
+              />
+            ) : (
+              <FileText className="w-4 h-4 text-purple-600 shrink-0" />
+            )}
+            <span className="font-semibold truncate">{filePreview.name}</span>
+            <span className="text-[11px] text-purple-600">({filePreview.size})</span>
+            {isUploading && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full ml-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Uploading...
+              </span>
+            )}
+          </div>
+          {!isUploading && (
+            <button
+              onClick={handleRemoveAttachment}
+              className="p-1 hover:text-rose-600 transition-colors cursor-pointer"
+              title="Remove attachment"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       )}
 
@@ -229,6 +354,7 @@ export default function MessageComposer({
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
               className="hidden"
             />
 
@@ -280,23 +406,24 @@ export default function MessageComposer({
           {/* Right: Transport selector, Send button & keyboard hint */}
           <div className="flex items-center gap-2">
             {isBackendConv && (
-              <div className="flex items-center gap-1.5 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded-md text-[11px] text-slate-600">
+              <div
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold border transition-all ${
+                  isConnected
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}
+                title={
+                  isConnected
+                    ? 'Messages sent in real-time via STOMP /app/chat.send'
+                    : 'STOMP disconnected: messages sent via REST fallback'
+                }
+              >
                 <span
-                  className={`w-2 h-2 rounded-full ${
-                    isConnected ? 'bg-emerald-500 shadow-xs' : 'bg-amber-400'
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
                   }`}
-                  title={isConnected ? 'STOMP WebSocket Connected' : 'STOMP Offline'}
                 />
-                <select
-                  value={sendMode}
-                  onChange={(e) => setSendMode(e.target.value)}
-                  className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
-                  title="Select transport protocol"
-                >
-                  <option value="auto">Auto (REST + STOMP)</option>
-                  <option value="stomp">STOMP (/app/chat.send)</option>
-                  <option value="rest">REST (POST /messages)</option>
-                </select>
+                <span>{isConnected ? 'STOMP Live' : 'REST Fallback'}</span>
               </div>
             )}
 
@@ -306,15 +433,15 @@ export default function MessageComposer({
             <button
               type="button"
               onClick={handleSend}
-              disabled={(!text.trim() && !attachedFile) || isSendingMessage}
+              disabled={(!text.trim() && !rawFile) || isBusy}
               className={`p-2 rounded-lg transition-all flex items-center justify-center ${
-                text.trim() || attachedFile
+                (text.trim() || rawFile) && !isBusy
                   ? 'bg-purple-700 hover:bg-purple-800 text-white shadow-xs cursor-pointer'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
-              title="Send message"
+              title={isUploading ? 'Uploading file...' : 'Send message'}
             >
-              {isSendingMessage ? (
+              {isBusy ? (
                 <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
               ) : (
                 <SendHorizontal className="w-4 h-4" />

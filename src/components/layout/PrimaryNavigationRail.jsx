@@ -29,6 +29,15 @@ export default function PrimaryNavigationRail() {
   const dispatch = useDispatch();
   const { user, isMockAuth } = useSelector((state) => state.auth);
   const { unreadCount } = useSelector((state) => state.notifications);
+  const { conversations, activeConversationId } = useSelector((state) => state.chat);
+
+  const defaultDmPath = (() => {
+    if (activeConversationId && activeConversationId.startsWith('CONV-')) {
+      return ROUTES.messageUrl(activeConversationId);
+    }
+    const firstConv = conversations?.find((c) => c.conversationId?.startsWith('CONV-'))?.conversationId;
+    return firstConv ? ROUTES.messageUrl(firstConv) : '/dashboard/messages';
+  })();
 
   const navItems = [
     {
@@ -48,7 +57,7 @@ export default function PrimaryNavigationRail() {
     {
       id: 'dms',
       label: 'DMs',
-      path: '/dashboard/messages/fac-02',
+      path: defaultDmPath,
       icon: MessageSquare,
       isActive: location.pathname.startsWith('/dashboard/messages'),
     },
