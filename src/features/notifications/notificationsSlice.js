@@ -3,10 +3,14 @@
  */
 
 import { createSlice } from '@reduxjs/toolkit';
+import { MOCK_NOTIFICATIONS } from '../../data/mockData';
+
+const initialNotifications = MOCK_NOTIFICATIONS;
 
 const initialState = {
-  notifications: [],
-  unreadCount: 0,
+  notifications: initialNotifications,
+  unreadCount: initialNotifications.filter((n) => !n.isRead).length,
+  selectedFilter: 'all', // 'all' | 'unread' | 'messages' | 'announcements'
   isLoading: false,
   error: null,
 };
@@ -27,19 +31,17 @@ const notificationsSlice = createSlice({
       const notification = state.notifications.find((n) => n.id === action.payload);
       if (notification && !notification.isRead) {
         notification.isRead = true;
-        state.unreadCount -= 1;
+        state.unreadCount = Math.max(0, state.unreadCount - 1);
       }
     },
     markAllRead(state) {
-      state.notifications.forEach((n) => { n.isRead = true; });
+      state.notifications.forEach((n) => {
+        n.isRead = true;
+      });
       state.unreadCount = 0;
     },
-    setNotificationsLoading(state, action) {
-      state.isLoading = action.payload;
-    },
-    setNotificationsError(state, action) {
-      state.error = action.payload;
-      state.isLoading = false;
+    setFilter(state, action) {
+      state.selectedFilter = action.payload;
     },
   },
 });
@@ -49,8 +51,7 @@ export const {
   addNotification,
   markAsRead,
   markAllRead,
-  setNotificationsLoading,
-  setNotificationsError,
+  setFilter,
 } = notificationsSlice.actions;
 
 export default notificationsSlice.reducer;

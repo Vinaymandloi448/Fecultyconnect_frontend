@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { connectSocket, disconnectSocket, getSocket } from '../services/socket/socketClient';
+import { connectSocket, getSocket } from '../services/socket/socketClient';
 import useAuth from './useAuth';
 
 export default function useSocket() {

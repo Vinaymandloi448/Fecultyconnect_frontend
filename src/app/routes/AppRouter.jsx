@@ -1,14 +1,18 @@
 /**
- * Application router configuration
+ * Application Router Configuration
  *
- * All route definitions live here. Pages are imported directly
- * (lazy-loading can be added later when bundle size warrants it).
- *
- * Route structure:
- *   /login, /register           → PublicRoute (redirect if already logged in)
- *   /dashboard, /chat, etc.     → ProtectedRoute (redirect to /login if not logged in)
- *   /                           → redirect to /dashboard
- *   *                           → 404
+ * Implements the full FacultyConnect route tree:
+ *   /                                 → LandingPage
+ *   /login                            → LoginPage (PublicRoute)
+ *   /register                         → RegisterPage (PublicRoute)
+ *   /dashboard                        → DashboardPage (ProtectedRoute, Slack Layout)
+ *   /dashboard/channels/:channelId   → ChatPage (Channel conversation)
+ *   /dashboard/messages/:userId      → ChatPage (Direct message)
+ *   /dashboard/files                  → DocumentsPage (Academic documents repository)
+ *   /dashboard/announcements          → AnnouncementsPage (Official notices)
+ *   /dashboard/notifications          → NotificationsPage (Activity center)
+ *   /dashboard/profile                → ProfilePage (Faculty profile)
+ *   *                                 → NotFoundPage
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -22,11 +26,14 @@ import ProtectedRoute from './ProtectedRoute';
 import PublicRoute from './PublicRoute';
 
 // Pages
+import LandingPage from '../../pages/LandingPage';
 import LoginPage from '../../pages/LoginPage';
 import RegisterPage from '../../pages/RegisterPage';
 import DashboardPage from '../../pages/DashboardPage';
 import ChatPage from '../../pages/ChatPage';
-import GroupsPage from '../../pages/GroupsPage';
+import DocumentsPage from '../../pages/DocumentsPage';
+import AnnouncementsPage from '../../pages/AnnouncementsPage';
+import NotificationsPage from '../../pages/NotificationsPage';
 import ProfilePage from '../../pages/ProfilePage';
 import NotFoundPage from '../../pages/NotFoundPage';
 
@@ -35,7 +42,10 @@ import ROUTES from '../../constants/routes';
 export default function AppRouter() {
   return (
     <Routes>
-      {/* ── Public auth routes (redirect to dashboard if already logged in) ── */}
+      {/* ── Public Landing Page ── */}
+      <Route path={ROUTES.HOME} element={<LandingPage />} />
+
+      {/* ── Public Auth Routes (Redirect to /dashboard if logged in) ── */}
       <Route element={<PublicRoute />}>
         <Route element={<AuthLayout />}>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
@@ -43,22 +53,27 @@ export default function AppRouter() {
         </Route>
       </Route>
 
-      {/* ── Protected app routes (redirect to login if not authenticated) ── */}
+      {/* ── Protected Workspace Routes (Slack Layout Shell) ── */}
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-          <Route path={ROUTES.CHAT} element={<ChatPage />} />
-          <Route path={ROUTES.CHAT_CONVERSATION} element={<ChatPage />} />
-          <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
-          <Route path={ROUTES.GROUP_DETAIL} element={<GroupsPage />} />
+          <Route path={ROUTES.CHANNEL} element={<ChatPage />} />
+          <Route path={ROUTES.MESSAGE} element={<ChatPage />} />
+          <Route path={ROUTES.FILES} element={<DocumentsPage />} />
+          <Route path={ROUTES.ANNOUNCEMENTS} element={<AnnouncementsPage />} />
+          <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
           <Route path={ROUTES.PROFILE} element={<ProfilePage />} />
+
+          {/* Legacy / Convenience Redirects */}
+          <Route path="/chat" element={<Navigate to="/dashboard/channels/general" replace />} />
+          <Route path="/chat/:conversationId" element={<Navigate to="/dashboard/channels/general" replace />} />
+          <Route path="/groups" element={<Navigate to="/dashboard/channels/general" replace />} />
+          <Route path="/groups/:groupId" element={<Navigate to="/dashboard/channels/general" replace />} />
+          <Route path="/documents" element={<Navigate to={ROUTES.FILES} replace />} />
         </Route>
       </Route>
 
-      {/* ── Root redirect ── */}
-      <Route path={ROUTES.HOME} element={<Navigate to={ROUTES.DASHBOARD} replace />} />
-
-      {/* ── Catch-all 404 ── */}
+      {/* ── 404 Catch-All ── */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
