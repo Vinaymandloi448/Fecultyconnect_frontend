@@ -3,13 +3,20 @@
  */
 
 import axiosInstance from '../../services/api/axiosInstance';
-import { USER_ENDPOINTS } from '../../constants/api';
+import { PROFILE_ENDPOINTS } from '../../constants/api';
 
+/**
+ * Get current faculty profile
+ * GET /api/profile/me
+ */
 export const getProfile = () =>
-  axiosInstance.get(USER_ENDPOINTS.ME);
+  axiosInstance.get(PROFILE_ENDPOINTS.ME);
 
+/**
+ * Update current faculty profile
+ * PUT /api/profile/me
+ * Body: { fullName, department, designation, subjects, profileImage, bio }
+ */
 export const updateProfile = (data) =>
-  axiosInstance.patch(USER_ENDPOINTS.UPDATE_PROFILE, data);
+  axiosInstance.put(PROFILE_ENDPOINTS.UPDATE, data);
 
-export const changePassword = (data) =>
-  axiosInstance.post(USER_ENDPOINTS.CHANGE_PASSWORD, data);

@@ -1,21 +1,27 @@
 /**
  * Redux store configuration
  *
- * Import and register each feature slice here as the app grows.
+ * Registers feature slices for auth, chat, documents, announcements, and notifications.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from '../../features/auth/authSlice';
+import chatReducer from '../../features/chat/chatSlice';
+import groupsReducer from '../../features/groups/groupsSlice';
+import profileReducer from '../../features/profile/profileSlice';
+import documentsReducer from '../../features/documents/documentsSlice';
+import announcementsReducer from '../../features/announcements/announcementsSlice';
+import notificationsReducer from '../../features/notifications/notificationsSlice';
 
 const store = configureStore({
   reducer: {
     auth: authReducer,
-    // chat:          chatReducer,
-    // groups:        groupsReducer,
-    // documents:     documentsReducer,
-    // announcements: announcementsReducer,
-    // notifications: notificationsReducer,
-    // profile:       profileReducer,
+    chat: chatReducer,
+    groups: groupsReducer,
+    profile: profileReducer,
+    documents: documentsReducer,
+    announcements: announcementsReducer,
+    notifications: notificationsReducer,
   },
   devTools: import.meta.env.DEV,
 });

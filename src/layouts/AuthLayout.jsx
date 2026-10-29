@@ -1,81 +1,99 @@
 /**
- * AuthLayout — Full-screen dark/deep purple split layout for authentication
+ * AuthLayout — Slack-Inspired Split Authentication Shell
  *
- * Left side: Faculty Connect & IPS Academy branding + Outlet (Login/Register forms)
- * Right side: Academic collaboration vector illustration & feature highlights
+ * Left Column: Rich aubergine branding, headline, and original UI preview
+ * Right Column: Clean white form container (<Outlet />) for Login and Register
  */
 
 import { Outlet, Link } from 'react-router-dom';
-import FacultyIllustration from '../components/ui/FacultyIllustration';
+import {
+  GraduationCap,
+  MessageSquare,
+  Hash,
+  ShieldCheck,
+  CheckCircle2,
+  FileText,
+  Lock,
+} from 'lucide-react';
 import ROUTES from '../constants/routes';
 
 export default function AuthLayout() {
   return (
-    <div className="min-h-screen w-full bg-[#0b051b] text-slate-100 flex flex-col justify-between overflow-x-hidden font-sans relative">
-      {/* Dynamic Ambient Background Elements */}
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-[600px] h-[600px] bg-purple-900/25 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 left-1/3 w-[450px] h-[450px] bg-indigo-900/20 rounded-full blur-[140px]" />
-        <div className="absolute bottom-0 right-0 w-[700px] h-[700px] bg-purple-950/40 rounded-full blur-[150px]" />
-      </div>
-
-      {/* Main Split Grid Container */}
-      <div className="relative z-10 min-h-screen w-full grid grid-cols-1 lg:grid-cols-12">
+    <div className="min-h-screen w-full bg-slate-50 flex flex-col font-sans select-none antialiased">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-screen">
         
-        {/* ── LEFT COLUMN: Branding & Form Content ── */}
-        <div className="lg:col-span-6 xl:col-span-5 flex flex-col justify-between p-6 sm:p-10 xl:p-14 min-h-screen bg-slate-950/40 backdrop-blur-xl border-r border-white/5">
+        {/* ── LEFT PANEL (Desktop): Rich Aubergine Brand Showcase ── */}
+        <div className="hidden lg:flex lg:col-span-5 bg-gradient-to-b from-[#350d36] via-[#3F0E40] to-[#522653] text-white p-10 xl:p-14 flex-col justify-between relative overflow-hidden">
           
-          {/* Header Branding Area */}
-          <header className="mb-6 sm:mb-8">
-            <Link to={ROUTES.LOGIN} className="inline-flex items-center gap-3.5 group focus:outline-none">
-              {/* Faculty Connect Logo Icon */}
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-fuchsia-500 p-0.5 shadow-lg shadow-purple-600/30 group-hover:scale-105 transition-transform duration-300">
-                <div className="w-full h-full rounded-[14px] bg-[#0f0728] flex items-center justify-center">
-                  <svg className="w-6 h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                    <path d="M6 12v5c3 3 9 3 12 0v-5" />
-                  </svg>
-                </div>
+          {/* Brand header */}
+          <div className="space-y-6 relative z-10">
+            <Link to={ROUTES.HOME} className="flex items-center gap-3 group focus:outline-none">
+              <div className="w-10 h-10 rounded-xl bg-white/10 p-0.5 border border-white/20 flex items-center justify-center">
+                <GraduationCap className="w-5 h-5 text-white" />
               </div>
-
-              {/* Brand Wordmark & Institution Tag */}
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold tracking-tight text-white group-hover:text-purple-200 transition-colors">
-                    Faculty Connect
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase tracking-wider">
-                    IPS Academy
-                  </span>
-                </div>
-                <p className="text-xs text-purple-300/70 font-medium">
-                  Connect. Collaborate. Communicate.
+                <span className="text-xl font-bold tracking-tight text-white">
+                  FacultyConnect
+                </span>
+                <p className="text-xs text-purple-200/70 font-medium">
+                  Academic Faculty Platform
                 </p>
               </div>
             </Link>
-          </header>
 
-          {/* Form Content (<Outlet />) */}
-          <main className="my-auto py-4 w-full max-w-md mx-auto">
-            <Outlet />
-          </main>
-
-          {/* Left Footer Info */}
-          <footer className="mt-8 pt-4 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between text-xs text-purple-300/50 gap-2">
-            <p>© {new Date().getFullYear()} IPS Academy — Faculty Connect</p>
-            <div className="flex items-center gap-4 text-purple-300/60">
-              <span className="hover:text-purple-300 transition-colors cursor-pointer">Security</span>
-              <span>•</span>
-              <span className="hover:text-purple-300 transition-colors cursor-pointer">Support</span>
-              <span>•</span>
-              <span className="hover:text-purple-300 transition-colors cursor-pointer">Privacy</span>
+            <div className="pt-4 space-y-2">
+              <h2 className="text-2xl xl:text-3xl font-extrabold tracking-tight leading-snug">
+                Welcome to your faculty collaboration workspace.
+              </h2>
+              <p className="text-xs xl:text-sm text-purple-200/80 leading-relaxed font-normal">
+                Stay aligned on course syllabi, invigilation duty rosters, department circulars, and research grants with fellow professors.
+              </p>
             </div>
-          </footer>
+          </div>
+
+          {/* Subtle UI Preview Card */}
+          <div className="my-8 p-5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 shadow-xl space-y-3 relative z-10">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Hash className="w-4 h-4 text-purple-300" />
+                <span className="font-bold text-xs text-white">#examination-updates</span>
+              </div>
+              <span className="text-[10px] text-purple-200/70 font-medium">Exam Cell</span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-start gap-2.5">
+                <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white font-bold text-[9px] flex items-center justify-center shrink-0">
+                  SR
+                </div>
+                <div>
+                  <span className="font-bold text-white text-[11px] mr-1.5">Dr. Sunita Rao (Dean)</span>
+                  <p className="text-purple-100 text-[11px] leading-relaxed">
+                    Mid-semester invigilation slots have been finalized. Please review the updated schedule.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-2 rounded-lg bg-black/20 border border-white/10 flex items-center gap-2 text-[10px]">
+                <FileText className="w-3.5 h-3.5 text-purple-300 shrink-0" />
+                <span className="truncate text-purple-100">Mid_Sem_Exam_Roster_2025.xlsx</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer note */}
+          <div className="pt-4 border-t border-white/10 text-xs text-purple-200/60 flex items-center justify-between relative z-10">
+            <span>Faculty-exclusive workspace</span>
+            <span>Encrypted & Verified</span>
+          </div>
+
         </div>
 
-        {/* ── RIGHT COLUMN: Illustration & Feature Showcase ── */}
-        <div className="hidden lg:block lg:col-span-6 xl:col-span-7 relative bg-gradient-to-br from-[#120731] via-[#1a0b45] to-[#0c051f]">
-          <FacultyIllustration />
+        {/* ── RIGHT PANEL: Form Area ── */}
+        <div className="lg:col-span-7 bg-white flex flex-col justify-center px-6 py-10 sm:px-12 xl:px-20 min-h-screen">
+          <div className="w-full max-w-md mx-auto">
+            <Outlet />
+          </div>
         </div>
 
       </div>
