@@ -30,6 +30,7 @@ import LandingPage from '../../pages/LandingPage';
 import LoginPage from '../../pages/LoginPage';
 import RegisterPage from '../../pages/RegisterPage';
 import DashboardPage from '../../pages/DashboardPage';
+import GroupsPage from '../../pages/GroupsPage';
 import ChatPage from '../../pages/ChatPage';
 import DocumentsPage from '../../pages/DocumentsPage';
 import AnnouncementsPage from '../../pages/AnnouncementsPage';
@@ -57,6 +58,7 @@ export default function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
+          <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
           <Route path={ROUTES.CHANNEL} element={<ChatPage />} />
           <Route path={ROUTES.MESSAGE} element={<ChatPage />} />
           <Route path={ROUTES.FILES} element={<DocumentsPage />} />
@@ -67,11 +69,12 @@ export default function AppRouter() {
           {/* Legacy / Convenience Redirects */}
           <Route path="/chat" element={<Navigate to="/dashboard/channels/general" replace />} />
           <Route path="/chat/:conversationId" element={<Navigate to="/dashboard/channels/general" replace />} />
-          <Route path="/groups" element={<Navigate to="/dashboard/channels/general" replace />} />
-          <Route path="/groups/:groupId" element={<Navigate to="/dashboard/channels/general" replace />} />
+          <Route path="/groups" element={<Navigate to={ROUTES.GROUPS} replace />} />
+          <Route path="/groups/:groupId" element={<Navigate to={ROUTES.GROUPS} replace />} />
           <Route path="/documents" element={<Navigate to={ROUTES.FILES} replace />} />
         </Route>
       </Route>
+
 
       {/* ── 404 Catch-All ── */}
       <Route path="*" element={<NotFoundPage />} />

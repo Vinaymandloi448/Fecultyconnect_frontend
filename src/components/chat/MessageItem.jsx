@@ -88,11 +88,11 @@ export default function MessageItem({
       {/* ── MESSAGE BODY ── */}
       <div className="flex-1 min-w-0">
         
-        {/* Header (Sender Name, Designation, Time) */}
+        {/* Header (Sender Name, Designation, Time, Status) */}
         {!isGrouped && (
           <div className="flex items-center gap-2 mb-0.5 flex-wrap">
             <span className="text-sm font-bold text-slate-900">
-              {message.senderName}
+              {message.senderName || message.senderId}
             </span>
             {message.senderDesignation && (
               <span className="px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 text-[10px] font-semibold border border-purple-200">
@@ -102,8 +102,14 @@ export default function MessageItem({
             <span className="text-[11px] text-slate-400 font-normal">
               {message.timestamp}
             </span>
+            {message.status && (
+              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono font-medium">
+                {message.status}
+              </span>
+            )}
           </div>
         )}
+
 
         {/* Text Content */}
         <div className="text-sm text-slate-800 leading-relaxed break-words whitespace-pre-wrap font-normal">

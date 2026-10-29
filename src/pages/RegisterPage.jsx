@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   ArrowLeft,
   GraduationCap,
+  ShieldCheck,
 } from 'lucide-react';
 import { register, clearError } from '../features/auth/authSlice';
 import ROUTES from '../constants/routes';
@@ -33,6 +34,7 @@ export default function RegisterPage() {
   const { isLoading, error } = useSelector((state) => state.auth);
 
   const [form, setForm] = useState({
+    facultyId: '',
     fullName: '',
     email: '',
     department: 'Computer Science & Engineering',
@@ -71,6 +73,10 @@ export default function RegisterPage() {
     const errs = {};
     if (!form.fullName.trim()) {
       errs.fullName = 'Full name is required.';
+    }
+
+    if (!form.facultyId.trim()) {
+      errs.facultyId = 'Institutional Faculty ID is required (e.g. FAC001).';
     }
 
     if (!form.email.trim()) {
@@ -115,7 +121,7 @@ export default function RegisterPage() {
     if (!validate()) return;
 
     const userData = {
-      facultyId: 'FAC-' + Date.now().toString().slice(-4),
+      facultyId: form.facultyId.trim().toUpperCase(),
       fullName: form.fullName.trim(),
       email: form.email.trim(),
       password: form.password,
@@ -125,6 +131,7 @@ export default function RegisterPage() {
       profileImage: '',
       bio: `${form.designation} in ${form.department}`,
     };
+
 
     const result = await dispatch(register(userData));
 
@@ -226,6 +233,38 @@ export default function RegisterPage() {
             <p className="text-rose-600 text-[11px] font-medium">{fieldErrors.fullName}</p>
           )}
         </div>
+
+        {/* Faculty Institutional ID */}
+        <div className="space-y-1">
+          <label htmlFor="reg-facultyId" className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Faculty ID / Institutional ID
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <input
+              id="reg-facultyId"
+              name="facultyId"
+              type="text"
+              value={form.facultyId}
+              onChange={handleChange}
+              placeholder="e.g. FAC001, FAC002"
+              className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition-all focus:outline-none ${
+                fieldErrors.facultyId
+                  ? 'border-rose-400 bg-rose-50/30 focus:border-rose-500 focus:ring-2 focus:ring-rose-100'
+                  : 'border-slate-300 focus:border-purple-600 focus:ring-2 focus:ring-purple-100'
+              }`}
+              disabled={isLoading}
+            />
+          </div>
+          {fieldErrors.facultyId ? (
+            <p className="text-rose-600 text-[11px] font-medium">{fieldErrors.facultyId}</p>
+          ) : (
+            <p className="text-[11px] text-slate-400">Your unique institutional ID used for peer conversations and groups.</p>
+          )}
+        </div>
+
 
         {/* College Email */}
         <div className="space-y-1">

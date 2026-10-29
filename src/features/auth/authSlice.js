@@ -37,19 +37,10 @@ export const login = createAsyncThunk(
 
       return { token, user: faculty, isMock: false };
     } catch (error) {
-      // If backend is unreachable or connection refused, allow dev fallback
-      const isNetworkError = !error.response || error.code === 'ERR_NETWORK';
-      if (isNetworkError) {
-        // Fallback to mock faculty login for development
-        const mockUser = {
-          ...MOCK_CURRENT_USER,
-          email: credentials.email || MOCK_CURRENT_USER.email,
-        };
-        const mockToken = 'mock-jwt-token-' + Date.now();
-        localStorage.setItem('token', mockToken);
-        localStorage.setItem('user', JSON.stringify(mockUser));
-        localStorage.setItem('isMockAuth', 'true');
-        return { token: mockToken, user: mockUser, isMock: true };
+      if (!error.response || error.code === 'ERR_NETWORK') {
+        return rejectWithValue(
+          'Cannot connect to backend server at http://localhost:8080. Please verify the Spring Boot service is running.',
+        );
       }
 
       const message =
@@ -68,23 +59,28 @@ export const register = createAsyncThunk(
       const response = await registerUser(userData);
       return response.data;
     } catch (error) {
-      const isNetworkError = !error.response || error.code === 'ERR_NETWORK';
-      if (isNetworkError) {
-        // Mock successful registration in dev mode
-        return {
-          id: 'fac-' + Date.now().toString().slice(-4),
-          ...userData,
-          status: 'online',
-          initials: userData.fullName
-            ? userData.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
-            : 'FC',
-        };
+      if (!error.response || error.code === 'ERR_NETWORK') {
+        return rejectWithValue(
+          'Cannot connect to backend server at http://localhost:8080. Please verify the Spring Boot service is running.',
+        );
       }
 
-      const message =
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        'Registration failed. Please check the provided details.';
+      let message = 'Registration failed. Please check the provided details.';
+      if (typeof error.response?.data?.error === 'string') {
+        message = error.response.data.error;
+      } else if (typeof error.response?.data?.message === 'string') {
+        message = error.response.data.message;
+      } else if (error.response?.data?.errors) {
+        if (Array.isArray(error.response.data.errors)) {
+          message = error.response.data.errors
+            .map((e) => (typeof e === 'string' ? e : e.defaultMessage || JSON.stringify(e)))
+            .join(', ');
+        } else if (typeof error.response.data.errors === 'object') {
+          message = Object.entries(error.response.data.errors)
+            .map(([field, err]) => `${field}: ${err}`)
+            .join(', ');
+        }
+      }
       return rejectWithValue(message);
     }
   },
@@ -96,7 +92,11 @@ export const loadUser = createAsyncThunk(
     const token = localStorage.getItem('token');
     const isMock = localStorage.getItem('isMockAuth') === 'true';
 
-    if (isMock || (token && token.startsWith('mock-'))) {
+    if (!token) {
+      return rejectWithValue({ isUnauthorized: true, message: 'No token found' });
+    }
+
+    if (isMock || token.startsWith('mock-')) {
       const user = savedUser || MOCK_CURRENT_USER;
       return { user, isMock: true };
     }
@@ -106,18 +106,26 @@ export const loadUser = createAsyncThunk(
       const user = response.data;
       localStorage.setItem('user', JSON.stringify(user));
       return { user, isMock: false };
-    } catch {
-      // In dev mode, preserve mock session if present
-      if (savedUser) {
-        return { user: savedUser, isMock: true };
+    } catch (error) {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('isMockAuth');
+        return rejectWithValue({
+          isUnauthorized: true,
+          message: 'Session expired. Please log in again.',
+        });
       }
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('isMockAuth');
-      return rejectWithValue('Session expired');
+
+      // Do not clear token or log out users on unrelated errors (e.g. temporary network failure)
+      return rejectWithValue({
+        isUnauthorized: false,
+        message: 'Could not connect to verify session. Preserving offline credentials.',
+      });
     }
   },
 );
+
 
 // ── Slice ────────────────────────────────────────────────────────
 
@@ -126,7 +134,7 @@ const initialState = {
   token: savedToken,
   isAuthenticated: !!(savedToken && savedUser),
   isMockAuth: savedIsMock,
-  isLoading: false,
+  isLoading: !!savedToken,
   error: null,
 };
 
@@ -222,11 +230,17 @@ const authSlice = createSlice({
         state.isAuthenticated = true;
         state.error = null;
       })
-      .addCase(loadUser.rejected, (state) => {
+      .addCase(loadUser.rejected, (state, action) => {
         state.isLoading = false;
-        state.user = null;
-        state.token = null;
-        state.isAuthenticated = false;
+        if (action.payload?.isUnauthorized) {
+          state.user = null;
+          state.token = null;
+          state.isAuthenticated = false;
+          state.error = action.payload.message;
+        } else {
+          // If session verification failed due to network error, do not log user out
+          state.error = action.payload?.message || null;
+        }
       });
   },
 });

@@ -41,3 +41,9 @@ export const GROUP_ENDPOINTS = {
   ADD_MEMBER: (groupId, facultyId) => `/groups/${groupId}/members/${facultyId}`,
   REMOVE_MEMBER: (groupId, facultyId) => `/groups/${groupId}/members/${facultyId}`,
 };
+
+export const SYSTEM_ENDPOINTS = {
+  HEALTH: '/health',
+};
+
+

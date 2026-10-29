@@ -9,7 +9,7 @@
  * - Frequently used department channels
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import {
@@ -26,11 +26,17 @@ import {
   Plus,
   BookOpen,
   Calendar,
+  Users,
+  Loader2,
+  Building2,
 } from 'lucide-react';
 import Avatar from '../components/ui/Avatar';
 import CreateChannelModal from '../components/modals/CreateChannelModal';
 import NewDmModal from '../components/modals/NewDmModal';
 import { updateUserStatus } from '../features/auth/authSlice';
+import { fetchProfile } from '../features/profile/profileSlice';
+import { fetchGroups } from '../features/groups/groupsSlice';
+import { fetchConversations } from '../features/chat/chatSlice';
 import ROUTES from '../constants/routes';
 
 export default function DashboardPage() {
@@ -38,20 +44,58 @@ export default function DashboardPage() {
   const dispatch = useDispatch();
 
   const { user, isMockAuth } = useSelector((state) => state.auth);
-  const { channels, facultyMembers, messages } = useSelector((state) => state.chat);
+  const { profileData } = useSelector((state) => state.profile);
+  const activeFaculty = profileData || user;
+
+  const { channels, facultyMembers, messages, conversations, isLoading: isLoadingChat } =
+    useSelector((state) => state.chat);
+  const { groups, isLoading: isLoadingGroups } = useSelector((state) => state.groups);
   const { announcements } = useSelector((state) => state.announcements);
   const { documents } = useSelector((state) => state.documents);
 
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
 
+  // Fetch real backend profile, groups and conversations on mount
+  useEffect(() => {
+    dispatch(fetchProfile());
+    dispatch(fetchGroups());
+    dispatch(fetchConversations());
+  }, [dispatch]);
+
   // Status switcher helpers
   const handleSetStatus = (newStatus) => {
     dispatch(updateUserStatus({ status: newStatus }));
   };
 
-  // Recent conversations: Take #general, #computer-science, and top DMs
-  const recentConvos = [
+  // Build real conversation list from backend conversations or fall back to active channels
+  const backendConvos = (conversations || []).map((conv) => {
+    const otherFacultyId =
+      conv.participantIds?.find(
+        (id) => id !== user?.facultyId && id !== user?.email,
+      ) || conv.participantIds?.[0] || 'Faculty Colleague';
+
+    const lastMsg =
+      messages[conv.conversationId]?.[messages[conv.conversationId].length - 1]?.content ||
+      'Start peer collaboration';
+
+    const timestamp = conv.updatedAt
+      ? new Date(conv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : 'Active';
+
+    return {
+      id: conv.conversationId,
+      name: otherFacultyId,
+      type: 'direct',
+      facultyId: otherFacultyId,
+      lastMessage: lastMsg,
+      timestamp: 'Today at ' + timestamp,
+      unread: 0,
+      path: ROUTES.messageUrl(conv.conversationId),
+    };
+  });
+
+  const defaultChannels = [
     {
       id: 'general',
       name: 'general',
@@ -67,35 +111,21 @@ export default function DashboardPage() {
       type: 'channel',
       lastMessage: messages['computer-science']?.[messages['computer-science'].length - 1]?.content || 'Lab roster updates',
       timestamp: 'Today at 11:35 AM',
-      unread: 1,
+      unread: 0,
       path: ROUTES.channelUrl('computer-science'),
     },
-    {
-      id: 'fac-02',
-      name: 'Dr. Priya Patel',
-      type: 'direct',
-      faculty: facultyMembers.find((f) => f.id === 'fac-02'),
-      lastMessage: messages['fac-02']?.[messages['fac-02'].length - 1]?.content || 'Thesis evaluation discussion',
-      timestamp: 'Today at 10:25 AM',
-      unread: 0,
-      path: ROUTES.messageUrl('fac-02'),
-    },
-    {
-      id: 'examination-updates',
-      name: 'examination-updates',
-      type: 'channel',
-      lastMessage: messages['examination-updates']?.[messages['examination-updates'].length - 1]?.content || 'Invigilation roster',
-      timestamp: 'Today at 9:05 AM',
-      unread: 0,
-      path: ROUTES.channelUrl('examination-updates'),
-    },
   ];
+
+  const recentConvos = backendConvos.length > 0
+    ? [...backendConvos.slice(0, 4), ...defaultChannels.slice(0, 2)]
+    : defaultChannels;
 
   // Pinned urgent announcements
   const topAnnouncements = announcements.slice(0, 3);
 
   // Recent documents
   const recentDocs = documents.slice(0, 4);
+
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full select-none">
@@ -117,11 +147,14 @@ export default function DashboardPage() {
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Welcome back, {user?.fullName || 'Faculty Colleague'}!
+              Welcome back, {activeFaculty?.fullName || 'Faculty Colleague'}!
             </h1>
 
             <p className="text-xs sm:text-sm text-purple-200/90 max-w-2xl leading-relaxed">
-              {user?.designation || 'Professor'} · {user?.department || 'Computer Science & Engineering'}.
+              {activeFaculty?.designation || 'Professor'} · {activeFaculty?.department || 'Computer Science & Engineering'}
+              {activeFaculty?.facultyId && (
+                <span> · ID: <strong className="text-white font-mono">{activeFaculty.facultyId}</strong></span>
+              )}.
               Collaborate with colleagues, join department groups, and access official college notices.
             </p>
           </div>
@@ -370,6 +403,93 @@ export default function DashboardPage() {
 
       </div>
 
+      {/* ── ACADEMIC GROUPS SECTION (Spring Boot Backend) ── */}
+      <div className="space-y-3 pt-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">
+                Departmental & Academic Groups
+              </h2>
+              <p className="text-[11px] text-slate-500">
+                Loaded directly from backend <code className="text-purple-700 bg-purple-50 px-1 rounded">GET /api/groups</code>
+              </p>
+            </div>
+          </div>
+          <Link
+            to={ROUTES.GROUPS}
+            className="text-xs font-semibold text-purple-700 hover:text-purple-900 transition-colors flex items-center gap-1"
+          >
+            <span>Manage all groups ({groups.length})</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        {isLoadingGroups ? (
+          <div className="p-8 rounded-2xl bg-white border border-slate-200 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+            <span>Loading academic groups from database...</span>
+          </div>
+        ) : groups.length === 0 ? (
+          <div className="p-6 rounded-2xl bg-white border border-slate-200 text-center space-y-2">
+            <Building2 className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="text-xs font-bold text-slate-700">No faculty groups yet</p>
+            <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+              Create your department committee or syllabus coordination group to start collaborating.
+            </p>
+            <button
+              onClick={() => setIsChannelModalOpen(true)}
+              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-700 text-white text-xs font-semibold hover:bg-purple-800 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create First Group</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {groups.slice(0, 3).map((group) => (
+              <div
+                key={group.groupId || group.id}
+                className="p-4 rounded-xl bg-white border border-slate-200 hover:border-purple-300 hover:shadow-xs transition-all flex flex-col justify-between space-y-3"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 truncate max-w-[160px]">
+                      {group.department}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-400 font-mono">
+                      {group.groupId}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-xs text-slate-900 line-clamp-1" title={group.name}>
+                    {group.name}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                    {group.description || `Active faculty group for ${group.department}.`}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 font-medium">
+                    {group.memberIds?.length || 0} members
+                  </span>
+                  <Link
+                    to={ROUTES.GROUPS}
+                    className="text-purple-700 hover:text-purple-900 font-semibold flex items-center gap-1"
+                  >
+                    <span>View Details</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── RECENTLY SHARED ACADEMIC DOCUMENTS ── */}
       <div className="space-y-3 pt-2">
         <div className="flex items-center justify-between">
@@ -377,6 +497,7 @@ export default function DashboardPage() {
             <FileText className="w-4 h-4 text-indigo-700" />
             <span>Recently Shared Academic Documents</span>
           </h2>
+
           <Link
             to={ROUTES.FILES}
             className="text-xs font-semibold text-purple-700 hover:text-purple-900 transition-colors"

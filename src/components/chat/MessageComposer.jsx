@@ -15,8 +15,12 @@ import {
   SendHorizontal,
   X,
   FileText,
+  Loader2,
+  Zap,
+  Radio,
 } from 'lucide-react';
-import { sendMessage } from '../../features/chat/chatSlice';
+import { sendMessage, sendChatMessage } from '../../features/chat/chatSlice';
+import useStomp from '../../hooks/useStomp';
 
 export default function MessageComposer({
   conversationId,
@@ -24,43 +28,72 @@ export default function MessageComposer({
 }) {
   const dispatch = useDispatch();
   const { user: currentUser } = useSelector((state) => state.auth);
+  const { conversations, isSendingMessage } = useSelector((state) => state.chat);
+  const { isConnected, send } = useStomp();
 
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
+  const [sendMode, setSendMode] = useState('auto'); // 'auto' | 'stomp' | 'rest'
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
 
   const quickEmojis = ['👍', '❤️', '💡', '📝', '🚀', '🎉', '🙏', '☕', '📚', '✅'];
 
-  const handleSend = () => {
+  // Check if target is a backend conversation (starts with CONV- or in conversations list or not chan-)
+  const isBackendConv =
+    conversationId &&
+    (conversationId.startsWith('CONV-') ||
+      conversations.some((c) => c.conversationId === conversationId) ||
+      (!conversationId.startsWith('chan-') && conversationId !== 'general'));
+
+  const handleSend = async () => {
     if (!text.trim() && !attachedFile) return;
+    const content = text.trim();
 
-    const newMessage = {
-      id: 'msg-' + Date.now(),
-      senderId: currentUser?.id || 'fac-01',
-      senderName: currentUser?.fullName || 'Faculty Member',
-      senderDesignation: currentUser?.designation || 'Faculty',
-      senderInitials: currentUser?.initials || 'FC',
-      senderAvatarColor: currentUser?.avatarColor || 'from-purple-600 to-indigo-600',
-      timestamp: 'Today at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      content: text.trim(),
-      attachment: attachedFile
-        ? {
-            name: attachedFile.name,
-            size: attachedFile.size,
-            type: attachedFile.type,
-          }
-        : null,
-      reactions: [],
-    };
+    if (isBackendConv) {
+      if (sendMode === 'stomp' && isConnected) {
+        // Send directly via WebSocket STOMP to /app/chat.send
+        const sent = send(conversationId, content);
+        if (!sent) {
+          // Fallback to REST if STOMP publish failed
+          dispatch(sendChatMessage({ conversationId, content }));
+        }
+      } else {
+        // Default / Auto / REST: Send via POST /api/conversations/{conversationId}/messages
+        // The backend persists and broadcasts via STOMP; deduplication handles both
+        dispatch(sendChatMessage({ conversationId, content }));
+      }
+    } else {
+      // Mock / Local channel fallback
+      const newMessage = {
+        id: 'msg-' + Date.now(),
+        senderId: currentUser?.id || currentUser?.facultyId || 'fac-01',
+        senderName: currentUser?.fullName || 'Faculty Member',
+        senderDesignation: currentUser?.designation || 'Faculty',
+        senderInitials: currentUser?.initials || 'FC',
+        senderAvatarColor: currentUser?.avatarColor || 'from-purple-600 to-indigo-600',
+        timestamp:
+          'Today at ' +
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        content,
+        attachment: attachedFile
+          ? {
+              name: attachedFile.name,
+              size: attachedFile.size,
+              type: attachedFile.type,
+            }
+          : null,
+        reactions: [],
+      };
 
-    dispatch(
-      sendMessage({
-        conversationId,
-        message: newMessage,
-      }),
-    );
+      dispatch(
+        sendMessage({
+          conversationId,
+          message: newMessage,
+        }),
+      );
+    }
 
     setText('');
     setAttachedFile(null);
@@ -244,23 +277,48 @@ export default function MessageComposer({
             </div>
           </div>
 
-          {/* Right: Send button & keyboard hint */}
+          {/* Right: Transport selector, Send button & keyboard hint */}
           <div className="flex items-center gap-2">
+            {isBackendConv && (
+              <div className="flex items-center gap-1.5 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded-md text-[11px] text-slate-600">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? 'bg-emerald-500 shadow-xs' : 'bg-amber-400'
+                  }`}
+                  title={isConnected ? 'STOMP WebSocket Connected' : 'STOMP Offline'}
+                />
+                <select
+                  value={sendMode}
+                  onChange={(e) => setSendMode(e.target.value)}
+                  className="bg-transparent font-medium text-slate-700 focus:outline-none cursor-pointer"
+                  title="Select transport protocol"
+                >
+                  <option value="auto">Auto (REST + STOMP)</option>
+                  <option value="stomp">STOMP (/app/chat.send)</option>
+                  <option value="rest">REST (POST /messages)</option>
+                </select>
+              </div>
+            )}
+
             <span className="hidden sm:inline text-[10px] text-slate-400">
               Return to send
             </span>
             <button
               type="button"
               onClick={handleSend}
-              disabled={!text.trim() && !attachedFile}
-              className={`p-1.5 rounded-lg transition-all flex items-center justify-center ${
+              disabled={(!text.trim() && !attachedFile) || isSendingMessage}
+              className={`p-2 rounded-lg transition-all flex items-center justify-center ${
                 text.trim() || attachedFile
                   ? 'bg-purple-700 hover:bg-purple-800 text-white shadow-xs cursor-pointer'
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
               title="Send message"
             >
-              <SendHorizontal className="w-4 h-4" />
+              {isSendingMessage ? (
+                <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
+              ) : (
+                <SendHorizontal className="w-4 h-4" />
+              )}
             </button>
           </div>
         </div>

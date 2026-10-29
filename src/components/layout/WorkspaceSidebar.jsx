@@ -5,7 +5,7 @@
  * unread badges, presence indicators, search filtering, and creation triggers.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import {
@@ -23,7 +23,8 @@ import {
 import Avatar from '../ui/Avatar';
 import CreateChannelModal from '../modals/CreateChannelModal';
 import NewDmModal from '../modals/NewDmModal';
-import { setActiveConversation } from '../../features/chat/chatSlice';
+import { setActiveConversation, fetchConversations } from '../../features/chat/chatSlice';
+import { fetchGroups } from '../../features/groups/groupsSlice';
 import ROUTES from '../../constants/routes';
 
 export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
@@ -31,7 +32,8 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const { channels, facultyMembers } = useSelector((state) => state.chat);
+  const { channels, facultyMembers, conversations } = useSelector((state) => state.chat);
+  const { groups } = useSelector((state) => state.groups);
   const { user: currentUser } = useSelector((state) => state.auth);
 
   const [filterQuery, setFilterQuery] = useState('');
@@ -41,16 +43,61 @@ export default function WorkspaceSidebar({ mobileOpen, onMobileClose }) {
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Filter channels & DMs by search
-  const filteredChannels = channels.filter((c) =>
+  // Automatically fetch groups and conversations from backend on mount
+  useEffect(() => {
+    if (currentUser) {
+      dispatch(fetchGroups());
+      dispatch(fetchConversations());
+    }
+  }, [currentUser, dispatch]);
+
+  // Combine static channels with backend groups
+  const groupChannels = (groups || []).map((g) => ({
+    id: g.groupId || g.id,
+    name: g.name,
+    isPrivate: false,
+    unreadCount: 0,
+    isGroup: true,
+  }));
+
+  const allChannels = [
+    ...channels,
+    ...groupChannels.filter((gc) => !channels.some((c) => c.id === gc.id)),
+  ];
+
+  // Filter channels by search
+  const filteredChannels = allChannels.filter((c) =>
     c.name.toLowerCase().includes(filterQuery.toLowerCase()),
   );
 
-  const filteredFaculty = facultyMembers
-    .filter((f) => f.id !== currentUser?.id)
-    .filter((f) =>
-      f.fullName.toLowerCase().includes(filterQuery.toLowerCase()),
-    );
+  // Combine backend 1-on-1 conversations with directory faculty
+  const backendDMs = (conversations || []).map((conv) => {
+    const otherParticipant =
+      conv.participantIds?.find(
+        (id) => id !== currentUser?.facultyId && id !== currentUser?.email,
+      ) || conv.participantIds?.[0] || 'Faculty Colleague';
+
+    return {
+      id: conv.conversationId,
+      fullName: otherParticipant,
+      initials: otherParticipant.slice(0, 2).toUpperCase(),
+      status: 'online',
+      avatarColor: 'from-purple-600 to-indigo-600',
+      isConversation: true,
+    };
+  });
+
+  const allFaculty = [
+    ...backendDMs,
+    ...facultyMembers.filter(
+      (f) => !backendDMs.some((b) => b.id === f.id) && f.id !== currentUser?.id,
+    ),
+  ];
+
+  const filteredFaculty = allFaculty.filter((f) =>
+    f.fullName.toLowerCase().includes(filterQuery.toLowerCase()),
+  );
+
 
   const handleSelectChannel = (channelId) => {
     dispatch(setActiveConversation({ id: channelId, type: 'channel' }));

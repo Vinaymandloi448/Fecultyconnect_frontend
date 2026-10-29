@@ -10,6 +10,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import {
   GraduationCap,
   LayoutDashboard,
+  Users,
   MessageSquare,
   Megaphone,
   FileText,
@@ -38,12 +39,20 @@ export default function PrimaryNavigationRail() {
       isActive: location.pathname === ROUTES.DASHBOARD,
     },
     {
+      id: 'groups',
+      label: 'Groups',
+      path: ROUTES.GROUPS,
+      icon: Users,
+      isActive: location.pathname.startsWith(ROUTES.GROUPS),
+    },
+    {
       id: 'dms',
       label: 'DMs',
       path: '/dashboard/messages/fac-02',
       icon: MessageSquare,
       isActive: location.pathname.startsWith('/dashboard/messages'),
     },
+
     {
       id: 'announcements',
       label: 'Notices',

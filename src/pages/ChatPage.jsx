@@ -8,13 +8,14 @@
 import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import { Hash, MessageSquare, Sparkles } from 'lucide-react';
+import { Hash, MessageSquare, Sparkles, Loader2, Wifi, WifiOff } from 'lucide-react';
 import ChatHeader from '../components/chat/ChatHeader';
 import MessageItem from '../components/chat/MessageItem';
 import MessageComposer from '../components/chat/MessageComposer';
 import DetailsPanel from '../components/chat/DetailsPanel';
 import Avatar from '../components/ui/Avatar';
-import { setActiveConversation } from '../features/chat/chatSlice';
+import { setActiveConversation, fetchMessages } from '../features/chat/chatSlice';
+import useStomp from '../hooks/useStomp';
 
 export default function ChatPage() {
   const { channelId, userId } = useParams();
@@ -24,9 +25,14 @@ export default function ChatPage() {
   const {
     channels,
     facultyMembers,
+    conversations,
     messages,
+    isLoadingMessages,
     isDetailsPanelOpen,
   } = useSelector((state) => state.chat);
+
+  const { user: currentUser } = useSelector((state) => state.auth);
+  const { isConnected, subscribe } = useStomp();
 
   // Determine conversation ID and type from URL parameters
   const isDirectMessage = Boolean(userId);
@@ -35,6 +41,24 @@ export default function ChatPage() {
   // Find active entity
   const activeChannel = channels.find((c) => c.id === conversationId);
   const activeFaculty = facultyMembers.find((f) => f.id === conversationId);
+  const activeConv = conversations.find((c) => c.conversationId === conversationId);
+
+  // Compute other faculty details for backend conversations
+  const otherFacultyId =
+    activeConv?.participantIds?.find((id) => id !== currentUser?.facultyId) ||
+    activeConv?.facultyId ||
+    (isDirectMessage ? userId : null);
+
+  const displayFaculty = activeFaculty || {
+    id: otherFacultyId || conversationId,
+    facultyId: otherFacultyId,
+    fullName: otherFacultyId ? `Faculty (${otherFacultyId})` : 'Faculty Colleague',
+    designation: 'Faculty Member',
+    department: 'Academic Collaboration',
+    initials: otherFacultyId ? otherFacultyId.slice(0, 2).toUpperCase() : 'FC',
+    avatarColor: 'from-purple-600 to-indigo-600',
+    status: isConnected ? 'online' : 'away',
+  };
 
   // Sync with Redux active state
   useEffect(() => {
@@ -45,6 +69,24 @@ export default function ChatPage() {
       }),
     );
   }, [conversationId, isDirectMessage, dispatch]);
+
+  // Load message history from backend for conversation
+  useEffect(() => {
+    // If conversation starts with CONV- or is a direct message, fetch from Spring Boot
+    if (conversationId && (isDirectMessage || conversationId.startsWith('CONV-'))) {
+      dispatch(fetchMessages(conversationId));
+    }
+  }, [conversationId, isDirectMessage, dispatch]);
+
+  // Subscribe to STOMP WebSocket topic /topic/conversation/{conversationId}
+  useEffect(() => {
+    if (isConnected && conversationId && (isDirectMessage || conversationId.startsWith('CONV-'))) {
+      const unsubscribe = subscribe(conversationId);
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    }
+  }, [isConnected, conversationId, isDirectMessage, subscribe]);
 
   const conversationMessages = messages[conversationId] || [];
 
@@ -62,7 +104,7 @@ export default function ChatPage() {
         {/* Chat top header bar */}
         <ChatHeader
           conversation={activeChannel}
-          faculty={activeFaculty}
+          faculty={displayFaculty}
           type={isDirectMessage ? 'direct' : 'channel'}
         />
 
@@ -74,21 +116,21 @@ export default function ChatPage() {
             {isDirectMessage ? (
               <div className="flex items-start gap-3">
                 <Avatar
-                  name={activeFaculty?.fullName || 'Faculty Member'}
-                  initials={activeFaculty?.initials}
+                  name={displayFaculty?.fullName || 'Faculty Member'}
+                  initials={displayFaculty?.initials}
                   size="xl"
                   rounded="2xl"
-                  gradient={activeFaculty?.avatarColor}
+                  gradient={displayFaculty?.avatarColor}
                 />
                 <div className="space-y-1">
                   <h3 className="text-xl font-bold text-slate-900">
-                    {activeFaculty?.fullName || 'Faculty Colleague'}
+                    {displayFaculty?.fullName || 'Faculty Colleague'}
                   </h3>
                   <p className="text-xs text-purple-700 font-semibold">
-                    {activeFaculty?.designation} · {activeFaculty?.department}
+                    {displayFaculty?.designation} · {displayFaculty?.department}
                   </p>
                   <p className="text-xs text-slate-500">
-                    This is the start of your direct academic collaboration with {activeFaculty?.fullName}. Share exam duties, curriculum drafts, and private updates.
+                    This is the start of your direct academic collaboration with {displayFaculty?.fullName}. Share exam duties, curriculum drafts, and private updates.
                   </p>
                 </div>
               </div>
@@ -153,7 +195,7 @@ export default function ChatPage() {
           conversationId={conversationId}
           placeholder={
             isDirectMessage
-              ? `Message ${activeFaculty?.fullName || 'Faculty'}`
+              ? `Message ${displayFaculty?.fullName || 'Faculty'}`
               : `Message #${activeChannel?.name || 'channel'}`
           }
         />
@@ -164,7 +206,7 @@ export default function ChatPage() {
       {isDetailsPanelOpen && (
         <DetailsPanel
           conversation={activeChannel}
-          faculty={activeFaculty}
+          faculty={displayFaculty}
           type={isDirectMessage ? 'direct' : 'channel'}
         />
       )}

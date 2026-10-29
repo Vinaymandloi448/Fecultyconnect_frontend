@@ -3,16 +3,19 @@
  */
 
 import { useState } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Hash, Lock, Globe, Building2, HelpCircle } from 'lucide-react';
+import { Hash, Lock, Globe, Building2, HelpCircle, Loader2 } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { createChannel, setActiveConversation } from '../../features/chat/chatSlice';
+import { createNewGroup } from '../../features/groups/groupsSlice';
 import ROUTES from '../../constants/routes';
+
 
 export default function CreateChannelModal({ isOpen, onClose }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const { isCreating } = useSelector((state) => state.groups);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -31,7 +34,7 @@ export default function CreateChannelModal({ isOpen, onClose }) {
     'General College',
   ];
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const formattedName = name.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
 
@@ -40,23 +43,41 @@ export default function CreateChannelModal({ isOpen, onClose }) {
       return;
     }
 
-    dispatch(
-      createChannel({
-        name: formattedName,
-        description,
-        department,
-        isPrivate,
-      }),
-    );
+    try {
+      // Call real backend POST /api/groups
+      const groupResult = await dispatch(
+        createNewGroup({
+          name: formattedName,
+          description: description || `Channel for ${department}`,
+          department,
+          subject: department,
+        }),
+      );
 
-    dispatch(setActiveConversation({ id: formattedName, type: 'channel' }));
-    onClose();
-    setName('');
-    setDescription('');
-    setIsPrivate(false);
-    setError('');
-    navigate(ROUTES.channelUrl(formattedName));
+      // Also create local channel representation for chat stream
+      const channelId = groupResult.payload?.groupId || formattedName;
+      dispatch(
+        createChannel({
+          id: channelId,
+          name: formattedName,
+          description,
+          department,
+          isPrivate,
+        }),
+      );
+
+      dispatch(setActiveConversation({ id: channelId, type: 'channel' }));
+      onClose();
+      setName('');
+      setDescription('');
+      setIsPrivate(false);
+      setError('');
+      navigate(ROUTES.channelUrl(channelId));
+    } catch (err) {
+      setError(err?.message || 'Failed to create group');
+    }
   };
+
 
   return (
     <Modal
@@ -168,9 +189,9 @@ export default function CreateChannelModal({ isOpen, onClose }) {
           </button>
         </div>
 
-        {/* Disclaimer Notice */}
+        {/* Real Backend Notice */}
         <p className="text-[11px] text-slate-400 italic">
-          Note: In development mock mode, newly created channels are stored in current session state.
+          Channels synchronize directly with institutional faculty groups and committees in the college database.
         </p>
 
         {/* Action Buttons */}
@@ -184,9 +205,17 @@ export default function CreateChannelModal({ isOpen, onClose }) {
           </button>
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold shadow-md shadow-purple-900/20 transition-all cursor-pointer"
+            disabled={isCreating}
+            className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold shadow-md shadow-purple-900/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
           >
-            Create Channel
+            {isCreating ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Creating group...</span>
+              </>
+            ) : (
+              <span>Create Channel</span>
+            )}
           </button>
         </div>
       </form>

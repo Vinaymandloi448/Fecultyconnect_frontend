@@ -12,12 +12,14 @@ const ROUTES = {
 
   // Workspace Authenticated Routes
   DASHBOARD: '/dashboard',
+  GROUPS: '/dashboard/groups',
   CHANNEL: '/dashboard/channels/:channelId',
   MESSAGE: '/dashboard/messages/:userId',
   FILES: '/dashboard/files',
   ANNOUNCEMENTS: '/dashboard/announcements',
   NOTIFICATIONS: '/dashboard/notifications',
   PROFILE: '/dashboard/profile',
+
 
   // Helper url builders
   channelUrl: (channelId) => `/dashboard/channels/${channelId}`,
